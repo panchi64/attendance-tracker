@@ -2,7 +2,7 @@
 import DropDownChevronComponent from '../components/DropDownChevron.astro';
 const {courseName, sectionNumbers, professorName} = Astro.props;
 
-// Figure out why this doesn't update the label on the button
+// TODO: Figure out why this doesn't update the label on the button
 function updateSectionNumber(indexToSwitchTo) {
   return () => {
     const temp = sectionNumbers[0];
