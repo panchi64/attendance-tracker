@@ -1,3 +1,7 @@
+---
+import LogoComponent from "../components/Logo.astro";
+import OfficeHoursComponent from "../components/OfficeHours.astro";
+---
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,22 +14,14 @@
     <div class="h-[25vh] w-full border-amber-200 border-2">
         <div class="grid grid-cols-2 h-full place-items-center gap-8">
             <!--Leftmost Header-->
-            <div class="w-full border-purple-500 border-2">
-                <div class="justify-start flex-row">
-                    dude
-                    <!--Image-->
-                    <div></div>
-                    <!--Office Hours-->
-                    <div>
-                        <!--Title-->
-                        <div></div>
-                        <!--Hours-->
-                        <div></div>
-                    </div>
+            <div class="w-full border-purple-500 border-2 p-4">
+                <div class="justify-start flex flex-row place-items-center">
+                    <LogoComponent logoPath="public/UPRM-logo.png" universityName=""/>
+                    <OfficeHoursComponent days="LMV" timePeriod="10am-12pm"/>
                 </div>
             </div>
             <!--Rightmost Header-->
-            <div class="w-full border-green-500 border-2 place-content-center">
+            <div class="w-full border-green-500 border-2 place-content-center p-4">
                 whoa
                 <div class="flex flex-col">
                     <!--Course Name-->
