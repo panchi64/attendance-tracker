@@ -1,0 +1,40 @@
+---
+import DropDownChevronComponent from '../components/DropDownChevron.astro';
+const {courseName, sectionNumbers, professorName} = Astro.props;
+
+// Figure out why this doesn't update the label on the button
+function updateSectionNumber(indexToSwitchTo) {
+  return () => {
+    const temp = sectionNumbers[0];
+    sectionNumbers[0] = sectionNumbers[indexToSwitchTo];
+    sectionNumbers[indexToSwitchTo] = temp;
+  }
+}
+---
+
+<div class="grid grid-rows-2 h-fit justify-end">
+  <!--Course Name and Section-->
+  <div class="flex flex-row justify-end place-items-center">
+    <!--Course-->
+    <h1 class="text-4xl font-bold mr-2">{courseName} - </h1>
+    <!--Dropdown-->
+    <div class="dropdown-container justify-center">
+      <div class="dropdown">
+        <div class="flex flex-row place-items-center">
+          <label class="text-4xl cursor-pointer font-bold" tabindex="0">
+            {sectionNumbers[0]}
+          </label>
+          <DropDownChevronComponent/>
+        </div>
+        <div class="dropdown-menu dropdown-menu-bottom-left">
+          {sectionNumbers.map((sectionNumber, index) => {
+            if (index === 0) return;
+            return <a class="dropdown-item text-4xl font-bold" onclick={updateSectionNumber(index)}>{sectionNumber}</a>
+          })}
+        </div>
+      </div>
+    </div>
+  </div>
+  <!--Professor Name-->
+  <h1 class="text-4xl capitalize font-extralight">prof. {professorName}</h1>
+</div>

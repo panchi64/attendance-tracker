@@ -1,13 +1,14 @@
 ---
 import LogoComponent from "../components/Logo.astro";
 import OfficeHoursComponent from "../components/OfficeHours.astro";
+import CourseDetailsComponent from "../components/CourseDetails.astro";
 ---
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Attendance</title>
 </head>
 <body>
     <!--Header-->
@@ -16,19 +17,13 @@ import OfficeHoursComponent from "../components/OfficeHours.astro";
             <!--Leftmost Header-->
             <div class="w-full border-purple-500 border-2 p-4">
                 <div class="justify-start flex flex-row place-items-center">
-                    <LogoComponent logoPath="public/UPRM-logo.png" universityName=""/>
+                    <LogoComponent logoPath="/UPRM-logo.png" universityName=""/>
                     <OfficeHoursComponent days="LMV" timePeriod="10am-12pm"/>
                 </div>
             </div>
             <!--Rightmost Header-->
             <div class="w-full border-green-500 border-2 place-content-center p-4">
-                whoa
-                <div class="flex flex-col">
-                    <!--Course Name-->
-                    <div></div>
-                    <!--Professor Name-->
-                    <div></div>
-                </div>
+                <CourseDetailsComponent courseName="INEL4025" sectionNumbers={['100', '096', '060', '042']} professorName="goomba steinhold"/>
             </div>
         </div>
     </div>
