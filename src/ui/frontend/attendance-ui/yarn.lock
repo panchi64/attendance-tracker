@@ -1081,6 +1081,13 @@
   dependencies:
     undici-types "~5.26.4"
 
+"@types/postcss-js@^4.0.0":
+  version "4.0.4"
+  resolved "https://registry.yarnpkg.com/@types/postcss-js/-/postcss-js-4.0.4.tgz#4f0fafd7a0508c7edd33095f8743e8cf5c28ad78"
+  integrity sha512-j5+GMZVIPCJpRTwI/mO64mCzv7X+zAEq3JP0EV2lo/BrLWHAohEubUJimIAY23rH27+wKce0fXUYjAdBoqlaYw==
+  dependencies:
+    postcss "^8.3.3"
+
 "@types/resolve@1.20.2":
   version "1.20.2"
   resolved "https://registry.yarnpkg.com/@types/resolve/-/resolve-1.20.2.tgz#97d26e00cd4a0423b4af620abecf3e6f442b7975"
@@ -3436,7 +3443,7 @@ postcss-import@^15.1.0:
     read-cache "^1.0.0"
     resolve "^1.1.7"
 
-postcss-js@^4.0.1:
+postcss-js@^4.0.0, postcss-js@^4.0.1:
   version "4.0.1"
   resolved "https://registry.yarnpkg.com/postcss-js/-/postcss-js-4.0.1.tgz#61598186f3703bab052f1c4f7d805f3991bee9d2"
   integrity sha512-dDLF8pEO191hJMtlHFPRa8xsizHaM82MLfNkUHdUtVEV3tgTp5oj+8qbEqYM57SLfc74KSbw//4SeJma2LRVIw==
@@ -3471,7 +3478,7 @@ postcss-value-parser@^4.0.0, postcss-value-parser@^4.2.0:
   resolved "https://registry.yarnpkg.com/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz#723c09920836ba6d3e5af019f92bc0971c02e514"
   integrity sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==
 
-postcss@^8.4.23, postcss@^8.4.26, postcss@^8.4.27:
+postcss@^8.3.3, postcss@^8.4.19, postcss@^8.4.23, postcss@^8.4.26, postcss@^8.4.27:
   version "8.4.33"
   resolved "https://registry.yarnpkg.com/postcss/-/postcss-8.4.33.tgz#1378e859c9f69bf6f638b990a0212f43e2aaa742"
   integrity sha512-Kkpbhhdjw2qQs2O2DGX+8m5OVqEcbB9HRBvuYM9pgrjEFUg30A9LmXNlTAUj4S9kgtGyrMbTzVjH7E+s5Re2yg==
@@ -3627,6 +3634,16 @@ rimraf@^3.0.2:
   integrity sha512-JZkJMZkAGFFPP2YqXZXPbMlMBgsxzE8ILs4lMIX/2o0L9UBw9O/Y3o6wFw/i9YLapcUJWwqbi3kdxIPdC62TIA==
   dependencies:
     glob "^7.1.3"
+
+rippleui@^1.12.1:
+  version "1.12.1"
+  resolved "https://registry.yarnpkg.com/rippleui/-/rippleui-1.12.1.tgz#417cf83fd99095b71360683bcdf9d03904ab596c"
+  integrity sha512-2LLqGQy0Gb+V/XHC+Ucx7rKcgisTr1HBevVc+NiwTiJn4y38Ya1cad8I/ZZHfWbrvKG/bPKYh+XJCM8M4cUs0A==
+  dependencies:
+    "@types/postcss-js" "^4.0.0"
+    postcss "^8.4.19"
+    postcss-js "^4.0.0"
+    tailwindcss "^3.3.1"
 
 rollup-plugin-visualizer@^5.9.2, rollup-plugin-visualizer@^5.9.3:
   version "5.12.0"
@@ -4012,7 +4029,7 @@ supports-preserve-symlinks-flag@^1.0.0:
   resolved "https://registry.yarnpkg.com/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz#6eda4bd344a3c94aea376d4cc31bc77311039e09"
   integrity sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==
 
-tailwindcss@^3.3.3:
+tailwindcss@^3.3.1, tailwindcss@^3.3.3:
   version "3.4.1"
   resolved "https://registry.yarnpkg.com/tailwindcss/-/tailwindcss-3.4.1.tgz#f512ca5d1dd4c9503c7d3d28a968f1ad8f5c839d"
   integrity sha512-qAYmXRfk3ENzuPBakNK0SRrUDipP8NQnEY6772uDhflcQz5EhRdD7JNZxyrFHVQNCwULPBn6FNPp9brpO7ctcA==
