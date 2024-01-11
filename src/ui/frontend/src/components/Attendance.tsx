@@ -1,6 +1,6 @@
 function Attendance(props: {liveAttendance: number, maxAttendance: number}) {
     return(
-        <div class="flex flex-row m-8 w-full">
+        <div class="flex flex-row p-8 w-full">
             <p class="capitalize font-bold text-8xl text-black">
                 present - {props.liveAttendance.toLocaleString('en-US',{
                     minimumIntegerDigits: 2,
