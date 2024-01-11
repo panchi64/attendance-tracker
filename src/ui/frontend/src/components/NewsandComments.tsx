@@ -1,6 +1,6 @@
 function NewsandComments() {
     return(
-        <div class="w-full h-full grid-rows-8">
+        <div class="w-full h-full grid-rows-8 text-black m-8">
             <div class="row-span-1 row-start-1 text-3xl m-2">
                 News / Comments
                 <div class="divider my-2"></div>
