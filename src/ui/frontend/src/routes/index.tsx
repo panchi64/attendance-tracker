@@ -8,27 +8,27 @@ import AttendanceCounterComponent from "../components/Attendance"
 export default function Home() {
     return (
         <main class="bg-white">
-            <div class="h-[25vh] w-full border-amber-200 border-2">
+            <div class="h-[25vh] w-full">
                 <div class="grid grid-cols-2 h-full place-items-center gap-8">
                     {/*Leftmost Header*/}
-                    <div class="w-full border-purple-500 border-2 p-4">
+                    <div class="w-full p-4">
                         <div class="justify-start flex flex-row place-items-center">
                             <LogoComponent logoPath="/UPRM-logo.png" universityName=""/>
                             <OfficeHoursComponent days="LMV" timePeriod="10am-12pm"/>
                         </div>
                     </div>
                     {/*Rightmost Header*/}
-                    <div class="w-full border-green-500 border-2 place-content-center p-4">
+                    <div class="w-full place-content-center p-4">
                         <CourseDetailsComponent courseName="INEL4025" sectionNumbers={['100', '096', '060', '042']}
                                                 professorName="goomba steinhold"/>
                     </div>
                 </div>
             </div>
             {/*Body*/}
-            <div class="h-[65vh] w-full border-blue-500 border-2 grid grid-cols-3">
+            <div class="h-[65vh] w-full grid grid-cols-3">
                 <div class="col-span-2 col-start-1 flex flex-col">
                     <AttendanceCounterComponent liveAttendance={0} maxAttendance={64}/>
-                    <NewsandCommentsComponents/>
+                    <NewsandCommentsComponents textContent=""/>
                 </div>
                 <div class="col-span-1 col-start-3">
                     {/*<QRCodeComponent/>*/}
