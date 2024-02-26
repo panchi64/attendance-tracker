@@ -1,6 +1,6 @@
 function DropdownChevron() {
   return (
-    <div class="pl-2">
+    <div className="pl-2">
       <svg
         width="16"
         height="16"
@@ -11,9 +11,9 @@ function DropdownChevron() {
         <path
           d="M3 3L15 15L27 3"
           stroke="#E5E5E5"
-          stroke-width="5.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+          strokeWidth="5.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </svg>
     </div>
