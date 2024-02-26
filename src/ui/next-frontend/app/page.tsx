@@ -3,6 +3,7 @@ import OfficeHoursComponent from "../components/OfficeHours";
 import CourseDetailsComponent from "../components/CourseDetails";
 import NewsandCommentsComponents from "../components/NewsandComments"
 import AttendanceCounterComponent from "../components/Attendance"
+import './globals.css'
 
 export default function Home() {
   return (
