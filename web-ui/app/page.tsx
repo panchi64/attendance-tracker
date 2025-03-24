@@ -5,29 +5,46 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
-// Assume Pencil component is available
+// Import components and services
 import Pencil from './components/icons/Pencil';
+import LogoUploader from './components/ui/LogoUploader';
+import {
+  loadCurrentCoursePreferences,
+  saveCoursePreferences,
+  getAvailableCourses,
+  switchCourse,
+  createNewCourse,
+  CoursePreferences
+} from './services/preferencesService';
 
 export default function Dashboard() {
-  // State for customizable elements
-  const [courseName, setCourseName] = useState("Course Name");
+  // Load preferences on initial render
+  const [preferences, setPreferences] = useState<CoursePreferences | null>(null);
+
+  // State for UI elements derived from preferences
+  const [courseName, setCourseName] = useState("");
   const [isEditingCourseName, setIsEditingCourseName] = useState(false);
-  const [sectionNumber, setSectionNumber] = useState("000");
-  const [sections, setSections] = useState(["000", "001", "002"]);
+  const [sectionNumber, setSectionNumber] = useState("");
+  const [sections, setSections] = useState<string[]>([]);
   const [showSectionDropdown, setShowSectionDropdown] = useState(false);
-  const [professorName, setProfessorName] = useState("Prof. John Doe");
+  const [professorName, setProfessorName] = useState("");
   const [isEditingProfessorName, setIsEditingProfessorName] = useState(false);
-  const [officeHours, setOfficeHours] = useState("MWF: 10AM-12PM");
+  const [officeHours, setOfficeHours] = useState("");
   const [isEditingOfficeHours, setIsEditingOfficeHours] = useState(false);
-  const [news, setNews] = useState("lorem ipsum dolor sit amet");
+  const [news, setNews] = useState("");
   const [isEditingNews, setIsEditingNews] = useState(false);
-  const [presentCount, setPresentCount] = useState(0);
-  const [totalStudents, setTotalStudents] = useState(64);
+  const [totalStudents, setTotalStudents] = useState(0);
   const [isEditingTotalStudents, setIsEditingTotalStudents] = useState(false);
+  const [logoPath, setLogoPath] = useState("/university-logo.png");
+
+  // UI state
+  const [presentCount, setPresentCount] = useState(0);
   const [confirmationCode, setConfirmationCode] = useState("06b291");
   const [codeProgress, setCodeProgress] = useState(100);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [availableCourses, setAvailableCourses] = useState<string[]>([]);
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
 
   // Refs for click outside handlers
   const sectionDropdownRef = useRef(null);
@@ -35,9 +52,54 @@ export default function Dashboard() {
   const professorNameInputRef = useRef(null);
   const officeHoursInputRef = useRef(null);
   const totalStudentsInputRef = useRef(null);
+  const courseDropdownRef = useRef(null);
 
   // Mock QR code - in real implementation this would be generated
   const qrCodeUrl = "/qrcode-placeholder.png";
+
+  // Load preferences on initial render
+  useEffect(() => {
+    try {
+      const currentPrefs = loadCurrentCoursePreferences();
+      setPreferences(currentPrefs);
+
+      // Update state from preferences
+      setCourseName(currentPrefs.courseName);
+      setSectionNumber(currentPrefs.sectionNumber);
+      setSections(currentPrefs.sections);
+      setProfessorName(currentPrefs.professorName);
+      setOfficeHours(currentPrefs.officeHours);
+      setNews(currentPrefs.news);
+      setTotalStudents(currentPrefs.totalStudents);
+      setLogoPath(currentPrefs.logoPath);
+
+      // Load available courses
+      setAvailableCourses(getAvailableCourses());
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  }, []);
+
+  // Save preferences when relevant state changes
+  useEffect(() => {
+    // Only save if preferences are loaded
+    if (preferences) {
+      const updatedPreferences: CoursePreferences = {
+        ...preferences,
+        courseName,
+        sectionNumber,
+        sections,
+        professorName,
+        officeHours,
+        news,
+        totalStudents,
+        logoPath
+      };
+
+      saveCoursePreferences(updatedPreferences);
+      setPreferences(updatedPreferences);
+    }
+  }, [courseName, sectionNumber, sections, professorName, officeHours, news, totalStudents, logoPath]);
 
   // Handle confirmation code timer
   useEffect(() => {
@@ -73,11 +135,14 @@ export default function Dashboard() {
     return () => clearInterval(timeInterval);
   }, []);
 
-  // Handle clicks outside dropdown
+  // Handle clicks outside dropdowns
   useEffect(() => {
     function handleClickOutside(event) {
       if (sectionDropdownRef.current && !sectionDropdownRef.current.contains(event.target)) {
         setShowSectionDropdown(false);
+      }
+      if (courseDropdownRef.current && !courseDropdownRef.current.contains(event.target)) {
+        setShowCourseDropdown(false);
       }
     }
 
@@ -97,22 +162,85 @@ export default function Dashboard() {
     setShowSectionDropdown(false);
   };
 
+  // Handle logo change
+  const handleLogoChange = (newLogoPath: string) => {
+    setLogoPath(newLogoPath);
+  };
+
+  // Save current course
+  const handleSaveCourse = () => {
+    // If the name has been customized, save as a new course
+    if (preferences && courseName !== preferences.courseName) {
+      try {
+        const newPrefs = createNewCourse(courseName, {
+          sectionNumber,
+          sections,
+          professorName,
+          officeHours,
+          news,
+          totalStudents,
+          logoPath
+        });
+
+        setPreferences(newPrefs);
+        setAvailableCourses(getAvailableCourses());
+        alert(`Course "${courseName}" has been saved.`);
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    } else {
+      // Just save the current preferences
+      const updatedPreferences: CoursePreferences = {
+        courseName,
+        sectionNumber,
+        sections,
+        professorName,
+        officeHours,
+        news,
+        totalStudents,
+        logoPath
+      };
+
+      saveCoursePreferences(updatedPreferences);
+      alert(`Course "${courseName}" has been updated.`);
+    }
+  };
+
+  // Switch to a different course
+  const handleSwitchCourse = (selectedCourse: string) => {
+    const coursePrefs = switchCourse(selectedCourse);
+
+    if (coursePrefs) {
+      setPreferences(coursePrefs);
+
+      // Update all state variables
+      setCourseName(coursePrefs.courseName);
+      setSectionNumber(coursePrefs.sectionNumber);
+      setSections(coursePrefs.sections);
+      setProfessorName(coursePrefs.professorName);
+      setOfficeHours(coursePrefs.officeHours);
+      setNews(coursePrefs.news);
+      setTotalStudents(coursePrefs.totalStudents);
+      setLogoPath(coursePrefs.logoPath);
+
+      // Reset UI states
+      setPresentCount(0);
+      setShowCourseDropdown(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-300 bg-white">
           <div className="flex items-center">
-            <div className="w-32 h-32 relative">
-              <Image
-                src="/university-logo.png"
-                alt="University Logo"
-                width={128}
-                height={128}
-                className="object-contain"
-                priority
-              />
-            </div>
+            {/* Use the LogoUploader component */}
+            <LogoUploader
+              isCustomizing={isCustomizing}
+              defaultLogoPath={logoPath}
+              onLogoChange={handleLogoChange}
+            />
             <div className="ml-6">
               {isEditingOfficeHours && isCustomizing ? (
                 <div>
@@ -167,14 +295,14 @@ export default function Dashboard() {
               <div className="relative" ref={sectionDropdownRef}>
                 <div
                   className="text-4xl font-bold text-gray-900 cursor-pointer flex items-center"
-                  onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+                  onClick={() => isCustomizing && setShowSectionDropdown(!showSectionDropdown)}
                 >
                   {sectionNumber}
                   {isCustomizing && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
                 </div>
 
-                {/* Section dropdown - always accessible */}
-                {showSectionDropdown && (
+                {/* Section dropdown - only accessible in customize mode */}
+                {showSectionDropdown && isCustomizing && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
                     <ul className="py-1">
                       {sections.map((section) => (
@@ -190,16 +318,14 @@ export default function Dashboard() {
                           </button>
                         </li>
                       ))}
-                      {isCustomizing && (
-                        <li className="border-t border-gray-200">
-                          <button
-                            className="block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left"
-                            onClick={addNewSection}
-                          >
-                            + Add new section
-                          </button>
-                        </li>
-                      )}
+                      <li className="border-t border-gray-200">
+                        <button
+                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left"
+                          onClick={addNewSection}
+                        >
+                          + Add new section
+                        </button>
+                      </li>
                     </ul>
                   </div>
                 )}
@@ -272,8 +398,8 @@ export default function Dashboard() {
                 />
               ) : (
                 <div
-                  className="text-2xl cursor-pointer text-gray-800 p-4 rounded-md hover:bg-gray-50 transition-colors whitespace-pre-wrap flex"
-                  onClick={() => setIsEditingNews(true)}
+                  className={`text-2xl cursor-pointer text-gray-800 p-4 rounded-md hover:bg-gray-50 transition-colors whitespace-pre-wrap flex ${isCustomizing ? "cursor-pointer" : ""}`}
+                  onClick={() => isCustomizing && setIsEditingNews(true)}
                 >
                   <span>{news}</span>
                 </div>
@@ -313,13 +439,41 @@ export default function Dashboard() {
           <div className="text-xl font-medium text-gray-400 w-40 text-center">
             {format(currentTime, "h:mm:ss a")}
           </div>
-          <div className="flex gap-3">
-            <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer">
+          <div className="flex gap-3 relative">
+            <button
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer"
+              onClick={handleSaveCourse}
+            >
               Save Course
             </button>
-            <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer">
-              Switch Course
-            </button>
+
+            {/* Course switcher dropdown */}
+            <div className="relative" ref={courseDropdownRef}>
+              <button
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer"
+                onClick={() => setShowCourseDropdown(!showCourseDropdown)}
+              >
+                Switch Course
+              </button>
+
+              {showCourseDropdown && (
+                <div className="absolute right-0 bottom-12 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                  <ul className="py-1">
+                    {availableCourses.map((course) => (
+                      <li key={course}>
+                        <button
+                          className={`block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left ${course === courseName ? 'bg-gray-100 font-medium' : ''}`}
+                          onClick={() => handleSwitchCourse(course)}
+                        >
+                          {course}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             <button
               className={`px-4 py-2 ${isCustomizing ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-md text-sm shadow-sm transition-colors cursor-pointer`}
               onClick={() => setIsCustomizing(!isCustomizing)}
