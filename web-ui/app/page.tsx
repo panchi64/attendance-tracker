@@ -1,8 +1,12 @@
 "use client";
 
+// pages/index.js
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
+
+// Assume Pencil component is available
+import Pencil from './components/icons/Pencil';
 
 export default function Dashboard() {
   // State for customizable elements
@@ -112,7 +116,7 @@ export default function Dashboard() {
             <div className="ml-6">
               {isEditingOfficeHours && isCustomizing ? (
                 <div>
-                  <div className="text-gray-500 text-2xl font-semibold">Office Hours</div>
+                  <div className="text-gray-700 text-2xl font-semibold">Office Hours</div>
                   <input
                     ref={officeHoursInputRef}
                     type="text"
@@ -128,7 +132,10 @@ export default function Dashboard() {
                   onClick={() => isCustomizing && setIsEditingOfficeHours(true)}
                   className={isCustomizing ? "cursor-pointer" : ""}
                 >
-                  <div className="text-gray-400 text-2xl font-semibold">Office Hours</div>
+                  <div className="text-gray-700 text-2xl font-semibold flex items-center">
+                    Office Hours
+                    {isCustomizing && !isEditingOfficeHours && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
+                  </div>
                   <div className="text-3xl text-gray-800 font-medium mt-1">{officeHours}</div>
                 </div>
               )}
@@ -149,19 +156,21 @@ export default function Dashboard() {
                 />
               ) : (
                 <div
-                  className={`text-4xl font-bold text-gray-900 ${isCustomizing ? "cursor-pointer" : ""}`}
+                  className={`text-4xl font-bold text-gray-900 flex items-center ${isCustomizing ? "cursor-pointer" : ""}`}
                   onClick={() => isCustomizing && setIsEditingCourseName(true)}
                 >
+                  {isCustomizing && !isEditingCourseName && <Pencil className="mr-2 text-blue-500 w-5 h-5" />}
                   {courseName}
                 </div>
               )}
               <span className="text-4xl font-bold mx-2 text-gray-900">-</span>
               <div className="relative" ref={sectionDropdownRef}>
                 <div
-                  className="text-4xl font-bold text-gray-900 cursor-pointer"
+                  className="text-4xl font-bold text-gray-900 cursor-pointer flex items-center"
                   onClick={() => setShowSectionDropdown(!showSectionDropdown)}
                 >
                   {sectionNumber}
+                  {isCustomizing && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
                 </div>
 
                 {/* Section dropdown - always accessible */}
@@ -209,9 +218,10 @@ export default function Dashboard() {
               />
             ) : (
               <div
-                className={`text-2xl text-right mt-2 text-gray-700 ${isCustomizing ? "cursor-pointer" : ""}`}
+                className={`text-2xl text-right mt-2 text-gray-700 flex items-center justify-end ${isCustomizing ? "cursor-pointer" : ""}`}
                 onClick={() => isCustomizing && setIsEditingProfessorName(true)}
               >
+                {isCustomizing && !isEditingProfessorName && <Pencil className="mr-2 text-blue-500 w-5 h-5" />}
                 {professorName}
               </div>
             )}
@@ -240,12 +250,13 @@ export default function Dashboard() {
                   />
                 </div>
               ) : (
-                <span
-                  className={`text-3xl text-gray-300 ml-2 font-medium ${isCustomizing ? "cursor-pointer" : ""}`}
+                <div
+                  className={`flex items-center ${isCustomizing ? "cursor-pointer" : ""}`}
                   onClick={() => isCustomizing && setIsEditingTotalStudents(true)}
                 >
-                  /{totalStudents}
-                </span>
+                  <span className="text-3xl text-gray-400 ml-2 font-medium">/{totalStudents}</span>
+                  {isCustomizing && !isEditingTotalStudents && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
+                </div>
               )}
             </div>
 
@@ -261,10 +272,10 @@ export default function Dashboard() {
                 />
               ) : (
                 <div
-                  className="text-2xl cursor-pointer text-gray-800 p-4 rounded-md hover:bg-gray-50 transition-colors whitespace-pre-wrap"
+                  className="text-2xl cursor-pointer text-gray-800 p-4 rounded-md hover:bg-gray-50 transition-colors whitespace-pre-wrap flex"
                   onClick={() => setIsEditingNews(true)}
                 >
-                  {news}
+                  <span>{news}</span>
                 </div>
               )}
             </div>
@@ -284,9 +295,9 @@ export default function Dashboard() {
             <div className="w-full mt-6">
               <div className="text-center text-xl text-gray-700 font-medium">Confirmation Code</div>
               <div className="text-center text-7xl font-bold text-gray-900 mt-2">{confirmationCode}</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
+              <div className="w-full bg-gray-100 rounded-full h-2 mt-4">
                 <div
-                  className="bg-blue-300 h-2 rounded-full"
+                  className="bg-gray-300 h-2 rounded-full"
                   style={{ width: `${codeProgress}%` }}
                 ></div>
               </div>
@@ -310,7 +321,7 @@ export default function Dashboard() {
               Switch Course
             </button>
             <button
-              className={`px-4 py-2 ${isCustomizing ? 'bg-gray-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-md text-sm shadow-sm transition-colors cursor-pointer`}
+              className={`px-4 py-2 ${isCustomizing ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-md text-sm shadow-sm transition-colors cursor-pointer`}
               onClick={() => setIsCustomizing(!isCustomizing)}
             >
               {isCustomizing ? 'Done' : 'Customize'}
