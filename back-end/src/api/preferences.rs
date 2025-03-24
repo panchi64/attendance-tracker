@@ -1,16 +1,14 @@
-use actix_web::{get, post, web, HttpResponse};
+use crate::models::preferences::{CoursePreferences, Preferences};
+use crate::utils::error::Error;
+use actix_web::{HttpResponse, get, post, web};
 use serde_json::json;
 use sqlx::SqlitePool;
-use crate::models::preferences::{Preferences, CoursePreferences};
-use crate::utils::error::Error;
 
 // Get preferences route
 #[get("/preferences")]
 pub async fn get_preferences(db: web::Data<SqlitePool>) -> Result<HttpResponse, Error> {
     // Try to fetch existing preferences
-    let result = sqlx::query!(
-        "SELECT data FROM preferences WHERE id = 1"
-    )
+    let result = sqlx::query!("SELECT data FROM preferences WHERE id = 1")
         .fetch_optional(&**db)
         .await?;
 
@@ -20,7 +18,7 @@ pub async fn get_preferences(db: web::Data<SqlitePool>) -> Result<HttpResponse, 
             // Parse the JSON data
             serde_json::from_str::<Preferences>(&record.data)
                 .unwrap_or_else(|_| create_default_preferences())
-        },
+        }
         None => create_default_preferences(),
     };
 
@@ -46,8 +44,8 @@ pub async fn update_preferences(
         "#,
         json_data
     )
-        .execute(&**db)
-        .await?;
+    .execute(&**db)
+    .await?;
 
     Ok(HttpResponse::Ok().json(json!({
         "success": true,

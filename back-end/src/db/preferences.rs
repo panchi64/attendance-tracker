@@ -1,6 +1,6 @@
+use crate::models::preferences::{CoursePreferences, Preferences};
+use anyhow::{Context, Result};
 use sqlx::{Pool, Sqlite, query};
-use anyhow::{Result, Context};
-use crate::models::preferences::{Preferences, CoursePreferences};
 use std::collections::HashMap;
 
 /// Repository for preferences operations
@@ -16,9 +16,7 @@ impl PreferencesRepository {
     /// Get current preferences
     pub async fn get_preferences(&self) -> Result<Preferences> {
         // Try to fetch existing preferences
-        let result = sqlx::query!(
-            "SELECT data FROM preferences WHERE id = 1"
-        )
+        let result = sqlx::query!("SELECT data FROM preferences WHERE id = 1")
             .fetch_optional(&self.pool)
             .await?;
 
@@ -29,7 +27,7 @@ impl PreferencesRepository {
                 let preferences = serde_json::from_str::<Preferences>(&record.data)
                     .context("Failed to parse preferences JSON")?;
                 Ok(preferences)
-            },
+            }
             None => Ok(self.create_default_preferences()),
         }
     }
@@ -47,14 +45,17 @@ impl PreferencesRepository {
             "#,
             json_data
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
 
     /// Get preferences for specific course
-    pub async fn get_course_preferences(&self, course_name: &str) -> Result<Option<CoursePreferences>> {
+    pub async fn get_course_preferences(
+        &self,
+        course_name: &str,
+    ) -> Result<Option<CoursePreferences>> {
         let preferences = self.get_preferences().await?;
 
         Ok(preferences.courses.get(course_name).cloned())
@@ -79,7 +80,11 @@ impl PreferencesRepository {
     }
 
     /// Create a new course
-    pub async fn create_course(&self, course_name: &str, course_prefs: CoursePreferences) -> Result<CoursePreferences> {
+    pub async fn create_course(
+        &self,
+        course_name: &str,
+        course_prefs: CoursePreferences,
+    ) -> Result<CoursePreferences> {
         let mut preferences = self.get_preferences().await?;
 
         // Check if course already exists
@@ -88,7 +93,9 @@ impl PreferencesRepository {
         }
 
         // Insert the new course
-        preferences.courses.insert(course_name.to_string(), course_prefs.clone());
+        preferences
+            .courses
+            .insert(course_name.to_string(), course_prefs.clone());
 
         // Update current course
         preferences.current_course = course_name.to_string();
@@ -100,11 +107,17 @@ impl PreferencesRepository {
     }
 
     /// Update course preferences
-    pub async fn update_course(&self, course_name: &str, course_prefs: CoursePreferences) -> Result<CoursePreferences> {
+    pub async fn update_course(
+        &self,
+        course_name: &str,
+        course_prefs: CoursePreferences,
+    ) -> Result<CoursePreferences> {
         let mut preferences = self.get_preferences().await?;
 
         // Insert or update the course
-        preferences.courses.insert(course_name.to_string(), course_prefs.clone());
+        preferences
+            .courses
+            .insert(course_name.to_string(), course_prefs.clone());
 
         // Save updated preferences
         self.save_preferences(&preferences).await?;
@@ -126,15 +139,22 @@ impl PreferencesRepository {
 
         // If we deleted the current course, switch to another one
         if preferences.current_course == course_name {
-            preferences.current_course = preferences.courses.keys()
+            preferences.current_course = preferences
+                .courses
+                .keys()
                 .next()
                 .map(|k| k.to_string())
                 .unwrap_or_else(|| "default".to_string());
 
             // If we have no courses left, create a default one
-            if !preferences.courses.contains_key(&preferences.current_course) {
+            if !preferences
+                .courses
+                .contains_key(&preferences.current_course)
+            {
                 let default_prefs = self.create_default_course_preferences();
-                preferences.courses.insert("default".to_string(), default_prefs);
+                preferences
+                    .courses
+                    .insert("default".to_string(), default_prefs);
                 preferences.current_course = "default".to_string();
             }
         }

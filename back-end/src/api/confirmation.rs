@@ -1,9 +1,9 @@
-use actix_web::{get, post, web, HttpResponse};
+use crate::services::confirmation::ConfirmationCodeService;
+use crate::utils::error::Error;
+use actix_web::{HttpResponse, get, post, web};
 use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
-use crate::services::confirmation::ConfirmationCodeService;
-use crate::utils::error::Error;
 
 // Get current confirmation code route
 #[get("/confirmation-code/{course_id}")]
@@ -12,7 +12,7 @@ pub async fn get_current_code(
     db: web::Data<SqlitePool>,
     confirmation_service: web::Data<ConfirmationCodeService>,
 ) -> Result<HttpResponse, Error> {
-    let course_id = Uuid::parse_str(&path.into_inner())?;
+    let course_id = Uuid::parse_str(&path.into_inner()).map_err(|e| Error::UuidError(e))?;
 
     // Get the latest confirmation code for this course
     let code = sqlx::query!(
@@ -21,12 +21,13 @@ pub async fn get_current_code(
          ORDER BY created_at DESC LIMIT 1",
         course_id.to_string()
     )
-        .fetch_optional(&**db)
-        .await?;
+    .fetch_optional(&**db)
+    .await?;
 
     if let Some(code_record) = code {
         // Check if code is still valid
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&code_record.expires_at)?
+        let expires_at = chrono::DateTime::parse_from_rfc3339(&code_record.expires_at)
+            .map_err(|e| Error::ChronoError(e))?
             .with_timezone(&chrono::Utc);
 
         let now = chrono::Utc::now();
@@ -35,11 +36,11 @@ pub async fn get_current_code(
         // Calculate progress percentage
         let total_seconds = (expires_at - now).num_seconds();
         let progress = if total_seconds <= 0 || !is_valid {
-            0
+            0.0
         } else {
             // Assuming 5 minute expiry (300 seconds)
-            let elapsed = 300 - total_seconds;
-            let progress = (elapsed as f64 / 300.0) * 100.0;
+            let elapsed = 300.0 - total_seconds as f64;
+            let progress = (elapsed / 300.0) * 100.0;
             100.0 - progress.max(0.0).min(100.0)
         };
 
@@ -71,7 +72,7 @@ pub async fn generate_new_code(
     path: web::Path<String>,
     confirmation_service: web::Data<ConfirmationCodeService>,
 ) -> Result<HttpResponse, Error> {
-    let course_id = Uuid::parse_str(&path.into_inner())?;
+    let course_id = Uuid::parse_str(&path.into_inner()).map_err(|e| Error::UuidError(e))?;
 
     // Get expiry minutes from config
     let config = crate::config::Config::from_env().expect("Failed to load config");

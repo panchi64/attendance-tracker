@@ -1,22 +1,26 @@
-use chrono::{DateTime, Utc, Duration};
+use crate::models::confirmation_code::ConfirmationCode;
+use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
+use rand::distr::Alphanumeric;
+use rand::{Rng, rng};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use anyhow::Result;
-use rand::{rng, Rng};
-use rand::distr::Alphanumeric;
-use crate::models::confirmation_code::ConfirmationCode;
 
+#[derive(Clone)]
 pub struct ConfirmationCodeService {
     db: Pool<Sqlite>,
 }
-
 impl ConfirmationCodeService {
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self { db }
     }
 
     // Generate a new random confirmation code
-    pub async fn generate_code(&self, course_id: Uuid, expiry_mins: i64) -> Result<ConfirmationCode> {
+    pub async fn generate_code(
+        &self,
+        course_id: Uuid,
+        expiry_mins: i64,
+    ) -> Result<ConfirmationCode> {
         // Generate random alphanumeric code
         let code: String = rng()
             .sample_iter(&Alphanumeric)
@@ -35,8 +39,8 @@ impl ConfirmationCodeService {
             expires_at.to_rfc3339(),
             Utc::now().to_rfc3339()
         )
-            .execute(&self.db)
-            .await?;
+        .execute(&self.db)
+        .await?;
 
         Ok(ConfirmationCode {
             code,
@@ -54,8 +58,8 @@ impl ConfirmationCodeService {
             code,
             course_id.to_string()
         )
-            .fetch_optional(&self.db)
-            .await?;
+        .fetch_optional(&self.db)
+        .await?;
 
         if let Some(record) = result {
             let expires_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&record.expires_at)

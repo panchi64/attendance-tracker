@@ -1,9 +1,9 @@
+use anyhow::Result;
+use mime::Mime;
+use std::path::{Path, PathBuf};
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
-use std::path::{Path, PathBuf};
 use uuid::Uuid;
-use anyhow::{Result};
-use mime::Mime;
 
 /// Service for file storage operations
 pub struct StorageService {
@@ -72,7 +72,10 @@ impl StorageService {
     /// Delete a file by URL
     pub async fn delete_file(&self, url: &str) -> Result<bool> {
         // Extract filename from URL
-        let filename = url.split('/').last().ok_or_else(|| anyhow::anyhow!("Invalid URL"))?;
+        let filename = url
+            .split('/')
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("Invalid URL"))?;
         let file_path = self.upload_dir.join(filename);
 
         // Check if file exists

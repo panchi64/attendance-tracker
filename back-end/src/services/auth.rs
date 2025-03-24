@@ -1,13 +1,14 @@
+use crate::config::Config;
+use crate::models::user::{Claims, User};
+use anyhow::{Context, Result};
+use bcrypt::{DEFAULT_COST, hash, verify};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use chrono::{Utc, Duration};
-use bcrypt::{hash, verify, DEFAULT_COST};
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
-use anyhow::{Result, Context};
-use crate::models::user::{User, Claims};
-use crate::config::Config;
 
 /// Service for authentication operations
+#[derive(Clone)]
 pub struct AuthService {
     pool: Pool<Sqlite>,
     config: Config,
@@ -21,10 +22,7 @@ impl AuthService {
     /// Register a new user (professor)
     pub async fn register(&self, username: &str, password: &str) -> Result<User> {
         // Check if username already exists
-        let existing = sqlx::query!(
-            "SELECT username FROM users WHERE username = ?",
-            username
-        )
+        let existing = sqlx::query!("SELECT username FROM users WHERE username = ?", username)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -47,8 +45,8 @@ impl AuthService {
             password_hash,
             now.to_rfc3339()
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(User {
             id,
@@ -59,14 +57,18 @@ impl AuthService {
     }
 
     /// Authenticate user
-    pub async fn authenticate(&self, username: &str, password: &str) -> Result<Option<(User, String)>> {
+    pub async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<Option<(User, String)>> {
         // Find user by username
         let user_result = sqlx::query!(
             "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
             username
         )
-            .fetch_optional(&self.pool)
-            .await?;
+        .fetch_optional(&self.pool)
+        .await?;
 
         match user_result {
             Some(record) => {
@@ -88,7 +90,7 @@ impl AuthService {
                 } else {
                     Ok(None)
                 }
-            },
+            }
             None => Ok(None),
         }
     }
@@ -100,9 +102,9 @@ impl AuthService {
         let claims = decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.config.jwt_secret.as_bytes()),
-            &validation
+            &validation,
         )?
-            .claims;
+        .claims;
 
         Ok(claims)
     }
@@ -128,19 +130,25 @@ impl AuthService {
     }
 
     /// Change password
-    pub async fn change_password(&self, user_id: Uuid, current_password: &str, new_password: &str) -> Result<bool> {
+    pub async fn change_password(
+        &self,
+        user_id: Uuid,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<bool> {
         // Get user
         let user_result = sqlx::query!(
             "SELECT password_hash FROM users WHERE id = ?",
             user_id.to_string()
         )
-            .fetch_optional(&self.pool)
-            .await?;
+        .fetch_optional(&self.pool)
+        .await?;
 
         match user_result {
             Some(record) => {
                 // Verify current password
-                let password_matches = verify(current_password, &record.password_hash).unwrap_or(false);
+                let password_matches =
+                    verify(current_password, &record.password_hash).unwrap_or(false);
 
                 if !password_matches {
                     return Ok(false);
@@ -155,11 +163,11 @@ impl AuthService {
                     new_password_hash,
                     user_id.to_string()
                 )
-                    .execute(&self.pool)
-                    .await?;
+                .execute(&self.pool)
+                .await?;
 
                 Ok(true)
-            },
+            }
             None => Ok(false),
         }
     }

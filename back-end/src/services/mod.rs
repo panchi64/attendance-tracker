@@ -1,11 +1,11 @@
+pub mod attendance;
 pub mod auth;
-pub mod qrcode;
 pub mod confirmation;
+pub mod course;
 pub mod export;
 pub mod moodle;
-pub mod attendance;
-pub mod course;
 pub mod preference;
+pub mod qrcode;
 pub mod realtime;
-pub mod storage;
 pub mod statistics;
+pub mod storage;

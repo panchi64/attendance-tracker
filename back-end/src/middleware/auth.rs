@@ -1,15 +1,15 @@
+use crate::services::auth::AuthService;
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    Error, HttpMessage,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
     error::ErrorUnauthorized,
     http::header,
-    Error, HttpMessage,
 };
-use futures::future::{ready, LocalBoxFuture, Ready};
+use futures::future::{LocalBoxFuture, Ready, ready};
 use std::rc::Rc;
-use crate::services::auth::AuthService;
-use crate::models::user::Claims;
 
 // Auth middleware factory
+#[derive(Clone)]
 pub struct AuthMiddleware {
     auth_service: Rc<AuthService>,
 }
@@ -31,8 +31,8 @@ where
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
-    type InitError = ();
     type Transform = AuthMiddlewareService<S>;
+    type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
@@ -102,8 +102,6 @@ where
         }
 
         // Not authenticated
-        Box::pin(async move {
-            Err(ErrorUnauthorized("Unauthorized"))
-        })
+        Box::pin(async move { Err(ErrorUnauthorized("Unauthorized")) })
     }
 }

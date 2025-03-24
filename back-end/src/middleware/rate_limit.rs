@@ -1,12 +1,12 @@
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::ErrorTooManyRequests,
     Error,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    error::ErrorTooManyRequests,
 };
-use futures::future::{ready, LocalBoxFuture, Ready};
+use futures::future::{LocalBoxFuture, Ready, ready};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 // Rate limiter configuration
@@ -19,8 +19,8 @@ pub struct RateLimiterConfig {
 impl Default for RateLimiterConfig {
     fn default() -> Self {
         Self {
-            requests_per_minute: 60,  // Default: 60 requests per minute
-            burst_size: 5,            // Default: 5 burst requests
+            requests_per_minute: 60, // Default: 60 requests per minute
+            burst_size: 5,           // Default: 5 burst requests
         }
     }
 }
@@ -32,10 +32,11 @@ struct ClientTracker {
 }
 
 // Rate limiter middleware
+#[derive(Clone)]
 pub struct RateLimiter {
     config: RateLimiterConfig,
-    // Use Mutex for interior mutability in a sync context
-    clients: Mutex<HashMap<IpAddr, ClientTracker>>,
+    // Use Arc instead of Mutex for interior mutability in a sync context
+    clients: Arc<Mutex<HashMap<IpAddr, ClientTracker>>>,
 }
 
 impl RateLimiter {
@@ -72,7 +73,8 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         // Periodically clean up expired entries
         // In a real app, this would be better handled with a background task
-        if rand::random::<f32>() < 0.1 {  // 10% chance to clean up on transform
+        if rand::random::<f32>() < 0.1 {
+            // 10% chance to clean up on transform
             self.cleanup();
         }
 
@@ -91,6 +93,16 @@ pub struct RateLimiterMiddleware<S> {
     clients: Mutex<HashMap<IpAddr, ClientTracker>>,
 }
 
+impl Clone for RateLimiterMiddleware<S> {
+    fn clone(&self) -> Self {
+        Self {
+            service: self.service.clone(),
+            config: self.config.clone(),
+            clients: self.clients.clone(),
+        }
+    }
+}
+
 impl<S, B> Service<ServiceRequest> for RateLimiterMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
@@ -105,7 +117,9 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         // Get client IP address
-        let ip = req.connection_info().peer_addr()
+        let ip = req
+            .connection_info()
+            .peer_addr()
             .and_then(|addr| addr.parse::<IpAddr>().ok())
             .unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]));
 
@@ -145,9 +159,7 @@ where
                 Ok(res)
             })
         } else {
-            Box::pin(async {
-                Err(ErrorTooManyRequests("Rate limit exceeded"))
-            })
+            Box::pin(async { Err(ErrorTooManyRequests("Rate limit exceeded")) })
         }
     }
 }

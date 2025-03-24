@@ -1,11 +1,15 @@
-use actix_web::{post, web, HttpResponse, cookie::{Cookie, SameSite}};
-use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
-use bcrypt::{verify, DEFAULT_COST};
-use jsonwebtoken::{encode, Header, EncodingKey};
-use chrono::{Utc, Duration};
 use crate::models::user::User;
 use crate::utils::error::Error;
+use actix_web::{
+    HttpResponse,
+    cookie::{Cookie, SameSite},
+    post, web,
+};
+use bcrypt::{DEFAULT_COST, verify};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header, encode};
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -23,9 +27,9 @@ pub struct LoginResponse {
 
 #[derive(Serialize)]
 struct Claims {
-    sub: String,       // Subject (user id)
-    exp: usize,        // Expiration time
-    iat: usize,        // Issued at
+    sub: String, // Subject (user id)
+    exp: usize,  // Expiration time
+    iat: usize,  // Issued at
 }
 
 // Login route
@@ -43,8 +47,8 @@ pub async fn login(
         "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
         user_data.username
     )
-        .fetch_optional(&**db)
-        .await?;
+    .fetch_optional(&**db)
+    .await?;
 
     let user = match user_result {
         Some(user) => user,
@@ -90,13 +94,11 @@ pub async fn login(
         .max_age(actix_web::cookie::time::Duration::hours(24))
         .finish();
 
-    Ok(HttpResponse::Ok()
-        .cookie(cookie)
-        .json(LoginResponse {
-            success: true,
-            message: "Login successful".to_string(),
-            token: Some(token),
-        }))
+    Ok(HttpResponse::Ok().cookie(cookie).json(LoginResponse {
+        success: true,
+        message: "Login successful".to_string(),
+        token: Some(token),
+    }))
 }
 
 // Logout route
@@ -109,10 +111,8 @@ pub async fn logout() -> HttpResponse {
         .http_only(true)
         .finish();
 
-    HttpResponse::Ok()
-        .cookie(cookie)
-        .json(serde_json::json!({
-            "success": true,
-            "message": "Logged out successfully"
-        }))
+    HttpResponse::Ok().cookie(cookie).json(serde_json::json!({
+        "success": true,
+        "message": "Logged out successfully"
+    }))
 }

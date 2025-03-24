@@ -1,6 +1,6 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use local_ip_address::local_ip;
 use anyhow::Result;
+use local_ip_address::local_ip;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 // Check if an IP address is on the local network
 pub fn is_local_ip(ip: &IpAddr) -> bool {
@@ -32,12 +32,14 @@ pub fn get_local_network_range() -> Result<String> {
             // For IPv4, use a /24 network (255.255.255.0)
             let octets = ipv4.octets();
             Ok(format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]))
-        },
+        }
         IpAddr::V6(ipv6) => {
             // For IPv6, use a /64 network
             let segments = ipv6.segments();
-            Ok(format!("{:x}:{:x}:{:x}:{:x}::/64",
-                       segments[0], segments[1], segments[2], segments[3]))
+            Ok(format!(
+                "{:x}:{:x}:{:x}:{:x}::/64",
+                segments[0], segments[1], segments[2], segments[3]
+            ))
         }
     }
 }
@@ -50,11 +52,13 @@ pub fn is_ip_in_cidr(ip: &IpAddr, cidr: &str) -> bool {
             let octets = ipv4.octets();
             let prefix = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
             cidr.starts_with(&prefix)
-        },
+        }
         IpAddr::V6(ipv6) => {
             let segments = ipv6.segments();
-            let prefix = format!("{:x}:{:x}:{:x}:{:x}",
-                                 segments[0], segments[1], segments[2], segments[3]);
+            let prefix = format!(
+                "{:x}:{:x}:{:x}:{:x}",
+                segments[0], segments[1], segments[2], segments[3]
+            );
             cidr.starts_with(&prefix)
         }
     }

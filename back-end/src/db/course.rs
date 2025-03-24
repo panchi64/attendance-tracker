@@ -1,9 +1,9 @@
+use crate::models::course::{Course, CourseCreation, CoursePartial, CourseRecord};
+use anyhow::{Context, Result};
+use chrono::Utc;
+use serde_json;
 use sqlx::{Pool, Sqlite, query, query_as};
 use uuid::Uuid;
-use chrono::Utc;
-use anyhow::{Result, Context};
-use serde_json;
-use crate::models::course::{Course, CourseCreation, CoursePartial, CourseRecord};
 
 /// Repository for course operations
 pub struct CourseRepository {
@@ -17,17 +17,14 @@ impl CourseRepository {
 
     /// List all courses
     pub async fn list_courses(&self) -> Result<Vec<Course>> {
-        let courses = query_as!(
-            CourseRecord,
-            "SELECT * FROM courses ORDER BY name"
-        )
+        let courses = query_as!(CourseRecord, "SELECT * FROM courses ORDER BY name")
             .fetch_all(&self.pool)
             .await?
             .into_iter()
             .map(|record| {
                 // Parse sections JSON array
-                let sections: Vec<String> = serde_json::from_str(&record.sections)
-                    .unwrap_or_else(|_| vec![]);
+                let sections: Vec<String> =
+                    serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
 
                 Course {
                     id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
@@ -55,14 +52,14 @@ impl CourseRepository {
             "SELECT * FROM courses WHERE id = ?",
             id.to_string()
         )
-            .fetch_optional(&self.pool)
-            .await?;
+        .fetch_optional(&self.pool)
+        .await?;
 
         let course = match record {
             Some(record) => {
                 // Parse sections JSON array
-                let sections: Vec<String> = serde_json::from_str(&record.sections)
-                    .unwrap_or_else(|_| vec![]);
+                let sections: Vec<String> =
+                    serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
 
                 Some(Course {
                     id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
@@ -77,7 +74,7 @@ impl CourseRepository {
                     created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
                     updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
                 })
-            },
+            }
             None => None,
         };
 
@@ -109,8 +106,8 @@ impl CourseRepository {
             now.to_rfc3339(),
             now.to_rfc3339()
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(Course {
             id,
@@ -169,8 +166,8 @@ impl CourseRepository {
             now.to_rfc3339(),
             id.to_string()
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -178,22 +175,20 @@ impl CourseRepository {
     /// Delete a course
     pub async fn delete_course(&self, id: Uuid) -> Result<bool> {
         // First check if there are any attendance records for this course
-        let attendance_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM attendance WHERE course_id = ?"
-        )
-            .bind(id.to_string())
-            .fetch_one(&self.pool)
-            .await?;
+        let attendance_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM attendance WHERE course_id = ?")
+                .bind(id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
 
         if attendance_count.0 > 0 {
-            return Err(anyhow::anyhow!("Cannot delete course with existing attendance records"));
+            return Err(anyhow::anyhow!(
+                "Cannot delete course with existing attendance records"
+            ));
         }
 
         // Delete course
-        let result = query!(
-            "DELETE FROM courses WHERE id = ?",
-            id.to_string()
-        )
+        let result = query!("DELETE FROM courses WHERE id = ?", id.to_string())
             .execute(&self.pool)
             .await?;
 
@@ -202,18 +197,18 @@ impl CourseRepository {
 
     /// Count present students for a course on the current day
     pub async fn count_present_students(&self, course_id: Uuid) -> Result<i64> {
-        let today = Utc::now().date().and_hms(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
         let tomorrow = today + chrono::Duration::days(1);
 
         let count: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT student_id) FROM attendance
-             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?"
+             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
-            .bind(course_id.to_string())
-            .bind(today.to_rfc3339())
-            .bind(tomorrow.to_rfc3339())
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(course_id.to_string())
+        .bind(today.to_string())
+        .bind(tomorrow.to_string())
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(count.0)
     }

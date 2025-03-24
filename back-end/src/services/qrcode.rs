@@ -1,6 +1,6 @@
 use anyhow::Result;
+use image::{ExtendedColorType, Luma};
 use qrcode::QrCode;
-use image::Luma;
 
 pub struct QrCodeService;
 
@@ -14,7 +14,8 @@ impl QrCodeService {
         let code = QrCode::new(url.as_bytes())?;
 
         // Convert to image
-        let image = code.render::<Luma<u8>>()
+        let image = code
+            .render::<Luma<u8>>()
             .quiet_zone(false)
             .module_dimensions(6, 6)
             .build();
@@ -22,12 +23,14 @@ impl QrCodeService {
         // Convert to PNG
         let mut png_data = Vec::new();
         {
-            let mut encoder = image::codecs::png::PngEncoder::new(&mut png_data);
-            encoder.encode(
+            // Use the correct encoder method based on your image crate version
+            use image::ImageEncoder;
+            let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
+            encoder.write_image(
                 image.as_raw(),
                 image.width(),
                 image.height(),
-                image::ColorType::L8,
+                ExtendedColorType::from(image::ColorType::L8),
             )?;
         }
 

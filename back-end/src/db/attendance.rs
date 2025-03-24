@@ -1,8 +1,10 @@
+use crate::models::attendance::{
+    Attendance, AttendanceRecord, AttendanceStats, AttendanceSubmission,
+};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use sqlx::{Pool, Sqlite, query, query_as};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use anyhow::{Result, Context};
-use crate::models::attendance::{Attendance, AttendanceRecord, AttendanceSubmission, AttendanceStats};
 
 /// Repository for attendance operations
 pub struct AttendanceRepository {
@@ -15,7 +17,11 @@ impl AttendanceRepository {
     }
 
     /// Record a new attendance submission
-    pub async fn record_attendance(&self, submission: AttendanceSubmission, ip_address: Option<String>) -> Result<Attendance> {
+    pub async fn record_attendance(
+        &self,
+        submission: AttendanceSubmission,
+        ip_address: Option<String>,
+    ) -> Result<Attendance> {
         let id = Uuid::new_v4();
         let now = Utc::now();
 
@@ -47,19 +53,19 @@ impl AttendanceRepository {
 
     /// Check if student has already marked attendance today
     pub async fn has_attendance_today(&self, course_id: Uuid, student_id: &str) -> Result<bool> {
-        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
         let tomorrow = today + chrono::Duration::days(1);
 
         let count: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM attendance
-             WHERE course_id = ? AND student_id = ? AND timestamp >= ? AND timestamp < ?"
+             WHERE course_id = ? AND student_id = ? AND timestamp >= ? AND timestamp < ?",
         )
-            .bind(course_id.to_string())
-            .bind(student_id)
-            .bind(today.to_rfc3339())
-            .bind(tomorrow.to_rfc3339())
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(course_id.to_string())
+        .bind(student_id)
+        .bind(today.to_string())
+        .bind(tomorrow.to_string())
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(count.0 > 0)
     }
@@ -69,7 +75,7 @@ impl AttendanceRepository {
         &self,
         course_id: Uuid,
         start_date: Option<DateTime<Utc>>,
-        end_date: Option<DateTime<Utc>>
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<Attendance>> {
         // Base query
         let mut query_str = String::from(
@@ -107,16 +113,14 @@ impl AttendanceRepository {
             .fetch_all(&self.pool)
             .await?
             .into_iter()
-            .map(|record| {
-                Attendance {
-                    id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
-                    course_id: Uuid::parse_str(&record.course_id).unwrap_or_else(|_| Uuid::nil()),
-                    student_name: record.student_name,
-                    student_id: record.student_id,
-                    timestamp: record.timestamp.parse().unwrap_or_else(|_| Utc::now()),
-                    confirmation_code: record.confirmation_code,
-                    ip_address: record.ip_address,
-                }
+            .map(|record| Attendance {
+                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                course_id: Uuid::parse_str(&record.course_id).unwrap_or_else(|_| Uuid::nil()),
+                student_name: record.student_name,
+                student_id: record.student_id,
+                timestamp: record.timestamp.parse().unwrap_or_else(|_| Utc::now()),
+                confirmation_code: record.confirmation_code,
+                ip_address: record.ip_address,
             })
             .collect();
 
@@ -126,20 +130,18 @@ impl AttendanceRepository {
     /// Get attendance statistics for a course
     pub async fn get_attendance_stats(&self, course_id: Uuid) -> Result<AttendanceStats> {
         // Total attendance count
-        let total_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM attendance WHERE course_id = ?"
-        )
-            .bind(course_id.to_string())
-            .fetch_one(&self.pool)
-            .await?;
+        let total_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM attendance WHERE course_id = ?")
+                .bind(course_id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
 
         // Unique student count
-        let unique_students: (i64,) = sqlx::query_as(
-            "SELECT COUNT(DISTINCT student_id) FROM attendance WHERE course_id = ?"
-        )
-            .bind(course_id.to_string())
-            .fetch_one(&self.pool)
-            .await?;
+        let unique_students: (i64,) =
+            sqlx::query_as("SELECT COUNT(DISTINCT student_id) FROM attendance WHERE course_id = ?")
+                .bind(course_id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
 
         // Today's attendance count
         let today = Utc::now().date().and_hms(0, 0, 0);
@@ -147,13 +149,13 @@ impl AttendanceRepository {
 
         let today_count: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT student_id) FROM attendance
-             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?"
+             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
-            .bind(course_id.to_string())
-            .bind(today.to_rfc3339())
-            .bind(tomorrow.to_rfc3339())
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(course_id.to_string())
+        .bind(today.to_rfc3339())
+        .bind(tomorrow.to_rfc3339())
+        .fetch_one(&self.pool)
+        .await?;
 
         // Attendance by date
         let attendance_by_date = sqlx::query!(
@@ -167,11 +169,11 @@ impl AttendanceRepository {
              LIMIT 30",
             course_id.to_string()
         )
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|row| (row.date, row.count as i64))
-            .collect();
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|row| (row.date, row.count as i64))
+        .collect();
 
         Ok(AttendanceStats {
             total_records: total_count.0,
@@ -183,10 +185,7 @@ impl AttendanceRepository {
 
     /// Delete attendance record
     pub async fn delete_attendance(&self, id: Uuid) -> Result<bool> {
-        let result = query!(
-            "DELETE FROM attendance WHERE id = ?",
-            id.to_string()
-        )
+        let result = query!("DELETE FROM attendance WHERE id = ?", id.to_string())
             .execute(&self.pool)
             .await?;
 
@@ -199,8 +198,8 @@ impl AttendanceRepository {
             "DELETE FROM attendance WHERE course_id = ?",
             course_id.to_string()
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(result.rows_affected())
     }

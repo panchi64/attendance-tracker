@@ -1,9 +1,9 @@
-use sqlx::{Pool, Sqlite};
-use uuid::Uuid;
-use anyhow::{Result};
-use reqwest::Client;
-use std::collections::HashMap;
 use crate::db::attendance::AttendanceRepository;
+use anyhow::Result;
+use reqwest::Client;
+use sqlx::{Pool, Sqlite};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Service for Moodle LMS integration
 pub struct MoodleService {
@@ -72,7 +72,10 @@ impl MoodleService {
     }
 
     /// Synchronize student roster from Moodle
-    pub async fn sync_student_roster(&self, moodle_course_id: i64) -> Result<Vec<(String, String)>> {
+    pub async fn sync_student_roster(
+        &self,
+        moodle_course_id: i64,
+    ) -> Result<Vec<(String, String)>> {
         if !self.is_configured() {
             return Err(anyhow::anyhow!("Moodle integration not configured"));
         }

@@ -1,8 +1,8 @@
+use crate::models::attendance::{Attendance, AttendanceRecord};
+use anyhow::Result;
+use chrono::{DateTime, Utc};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use anyhow::Result;
-use crate::models::attendance::{Attendance, AttendanceRecord};
 
 pub struct ExportService {
     db: Pool<Sqlite>,
@@ -14,33 +14,47 @@ impl ExportService {
     }
 
     // Export attendance records to CSV
-    pub async fn export_attendance_csv(&self, course_id: Uuid, start_date: Option<DateTime<Utc>>, end_date: Option<DateTime<Utc>>) -> Result<Vec<u8>> {
+    pub async fn export_attendance_csv(
+        &self,
+        course_id: Uuid,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> Result<Vec<u8>> {
         // Query attendance records
-        let records = self.get_attendance_records(course_id, start_date, end_date).await?;
+        let records = self
+            .get_attendance_records(course_id, start_date, end_date)
+            .await?;
 
         // Create CSV writer
         let mut csv_data = Vec::new();
-        let mut wtr = csv::Writer::from_writer(&mut csv_data);
+        {
+            let mut wtr = csv::Writer::from_writer(&mut csv_data);
 
-        // Write header
-        wtr.write_record(&["Student ID", "Student Name", "Timestamp", "IP Address"])?;
+            // Write header
+            wtr.write_record(&["Student ID", "Student Name", "Timestamp", "IP Address"])?;
 
-        // Write records
-        for record in records {
-            wtr.write_record(&[
-                &record.student_id,
-                &record.student_name,
-                &record.timestamp.to_rfc3339(),
-                &record.ip_address.unwrap_or_default(),
-            ])?;
-        }
+            // Write records
+            for record in records {
+                wtr.write_record(&[
+                    &record.student_id,
+                    &record.student_name,
+                    &record.timestamp.to_rfc3339(),
+                    &record.ip_address.unwrap_or_default(),
+                ])?;
+            }
 
-        wtr.flush()?;
+            wtr.flush()?;
+        } // wtr is dropped here, releasing the borrow on csv_data
 
         Ok(csv_data)
     }
 
-    async fn get_attendance_records(&self, course_id: Uuid, start_date: Option<DateTime<Utc>>, end_date: Option<DateTime<Utc>>) -> Result<Vec<Attendance>> {
+    async fn get_attendance_records(
+        &self,
+        course_id: Uuid,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Attendance>> {
         // Construct query based on date range
         let mut query_str = String::from(
             "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
@@ -94,9 +108,7 @@ impl ExportService {
         let records = query.fetch_all(&self.db).await?;
 
         // Convert to Attendance objects
-        let result = records.into_iter()
-            .map(Attendance::from)
-            .collect();
+        let result = records.into_iter().map(Attendance::from).collect();
 
         Ok(result)
     }

@@ -1,6 +1,6 @@
-use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -12,7 +12,7 @@ pub struct User {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,       // Subject (user id)
-    pub exp: usize,        // Expiration time
-    pub iat: usize,        // Issued at
+    pub sub: String, // Subject (user id)
+    pub exp: usize,  // Expiration time
+    pub iat: usize,  // Issued at
 }

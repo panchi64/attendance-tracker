@@ -1,6 +1,6 @@
-use serde::{Serialize, Deserialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Course {
@@ -59,8 +59,8 @@ pub struct CourseRecord {
 impl From<CourseRecord> for Course {
     fn from(record: CourseRecord) -> Self {
         // Parse sections JSON array
-        let sections: Vec<String> = serde_json::from_str(&record.sections)
-            .unwrap_or_else(|_| vec![]);
+        let sections: Vec<String> =
+            serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
 
         Course {
             id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),

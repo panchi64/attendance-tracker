@@ -1,11 +1,11 @@
-use actix_web::{web, App, HttpServer, middleware::Logger};
 use actix_cors::Cors;
 use actix_files;
+use actix_web::{App, HttpServer, middleware::Logger, web};
+use dotenv::dotenv;
+use local_ip_address::local_ip;
+use log::{error, info};
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use log::{info, error};
-use local_ip_address::local_ip;
-use dotenv::dotenv;
 use tokio::signal;
 
 // Import our modules
@@ -18,19 +18,15 @@ mod services;
 mod utils;
 
 use config::Config;
-use middleware::{auth::AuthMiddleware, rate_limit::{RateLimiter, RateLimiterConfig}};
+use middleware::{
+    auth::AuthMiddleware,
+    rate_limit::{RateLimiter, RateLimiterConfig},
+};
 use services::{
-    auth::AuthService,
-    qrcode::QrCodeService,
-    confirmation::ConfirmationCodeService,
-    export::ExportService,
-    attendance::AttendanceService,
-    course::CourseService,
-    preference::PreferenceService,
-    realtime::RealtimeService,
-    storage::StorageService,
-    statistics::StatisticsService,
-    moodle::MoodleService,
+    attendance::AttendanceService, auth::AuthService, confirmation::ConfirmationCodeService,
+    course::CourseService, export::ExportService, moodle::MoodleService,
+    preference::PreferenceService, qrcode::QrCodeService, realtime::RealtimeService,
+    statistics::StatisticsService, storage::StorageService,
 };
 
 #[actix_web::main]
@@ -59,8 +55,8 @@ async fn main() -> std::io::Result<()> {
     }
 
     // Determine local IP address for QR code and server binding
-    let local_ip = local_ip()
-        .unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
+    let local_ip =
+        local_ip().unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
 
     let server_url = format!("http://{}:{}", local_ip, config.port);
     info!("Server will be accessible at: {}", server_url);
@@ -81,10 +77,7 @@ async fn main() -> std::io::Result<()> {
     let realtime_service = RealtimeService::new().into_arc();
 
     // Storage service for uploads
-    let storage_service = StorageService::new(
-        "public/uploads",
-        "/uploads",
-    );
+    let storage_service = StorageService::new("public/uploads", "/uploads");
 
     // Preference service
     let preference_service = PreferenceService::new(db_pool.clone());
@@ -151,9 +144,9 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin_fn(|origin, _req_head| {
                 // Allow localhost and local IP addresses
                 let origin_str = origin.to_str().unwrap_or("");
-                origin_str.starts_with("http://localhost:") ||
-                    origin_str.starts_with(&format!("http://{}:", local_ip)) ||
-                    origin_str.starts_with(&format!("http://127.0.0.1:"))
+                origin_str.starts_with("http://localhost:")
+                    || origin_str.starts_with(&format!("http://{}:", local_ip))
+                    || origin_str.starts_with(&format!("http://127.0.0.1:"))
             })
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec!["Authorization", "Content-Type"])
@@ -163,7 +156,6 @@ async fn main() -> std::io::Result<()> {
             // Middleware
             .wrap(Logger::default())
             .wrap(cors)
-
             // App state and services
             .app_data(db_data.clone())
             .app_data(auth_service_data.clone())
@@ -178,32 +170,27 @@ async fn main() -> std::io::Result<()> {
             .app_data(storage_service_data.clone())
             .app_data(moodle_service_data.clone())
             .app_data(config_data.clone())
-
             // API routes
             .service(
                 web::scope("/api")
                     // Authentication
                     .service(api::auth::login)
                     .service(api::auth::logout)
-
                     // Preferences
                     .service(api::preferences::get_preferences)
                     .service(api::preferences::update_preferences)
-
                     // Courses - public routes
                     .service(api::courses::list_courses)
                     .service(api::courses::get_course)
                     .service(api::courses::switch_course)
-
                     // Course management - protected routes
                     .service(
                         web::scope("/admin")
                             .wrap(auth_middleware.clone())
                             .service(api::courses::create_course)
                             .service(api::courses::update_course)
-                            .service(api::courses::delete_course)
+                            .service(api::courses::delete_course),
                     )
-
                     // Attendance - rate limited
                     .service(
                         web::scope("/attendance")
@@ -211,33 +198,25 @@ async fn main() -> std::io::Result<()> {
                             .service(api::attendance::submit_attendance)
                             .service(api::attendance::get_course_attendance)
                             .service(api::attendance::get_attendance_stats)
-                            .service(api::attendance::export_attendance_csv)
+                            .service(api::attendance::export_attendance_csv),
                     )
-
                     // Confirmation codes
                     .service(api::confirmation::get_current_code)
                     .service(api::confirmation::generate_new_code)
-
                     // File uploads
                     .service(api::uploads::upload_logo)
-
                     // QR Code
                     .service(api::qrcode::generate_qr_code)
-
                     // WebSocket for real-time updates
-                    .route("/ws/{course_id}", web::get().to(ws_handler))
+                    .route("/ws/{course_id}", web::get().to(ws_handler)),
             )
             // Serve uploaded files
             .service(actix_files::Files::new("/uploads", "public/uploads"))
-
             // Serve static files from the web-ui build directory
-            .service(
-                actix_files::Files::new("/", "web-ui/out")
-                    .index_file("index.html")
-            )
+            .service(actix_files::Files::new("/", "web-ui/out").index_file("index.html"))
     })
-        .bind((config.host.as_str(), config.port))?
-        .run();
+    .bind((config.host.as_str(), config.port))?
+    .run();
 
     // WebSocket handler for realtime updates
     async fn ws_handler(
@@ -253,10 +232,8 @@ async fn main() -> std::io::Result<()> {
         };
 
         // Create WebSocket session
-        let ws_session = services::realtime::WebSocketSession::new(
-            course_id,
-            realtime_service.clone(),
-        );
+        let ws_session =
+            services::realtime::WebSocketSession::new(course_id, realtime_service.clone());
 
         // Start WebSocket connection
         actix_web_actors::ws::start(ws_session, &req, stream)

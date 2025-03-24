@@ -1,12 +1,12 @@
-use actix_web::{post, web, HttpResponse, Error};
 use actix_multipart::Multipart;
+use actix_web::{Error, HttpResponse, post, web};
 use futures::{StreamExt, TryStreamExt};
-use std::io::Write;
-use std::path::Path;
-use uuid::Uuid;
-use tokio::fs;
 use mime::Mime;
 use serde_json::json;
+use std::io::Write;
+use std::path::Path;
+use tokio::fs;
+use uuid::Uuid;
 
 // Constants
 const MAX_FILE_SIZE: usize = 2 * 1024 * 1024; // 2MB
@@ -26,8 +26,12 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
     // Process uploaded file
     while let Ok(Some(mut field)) = payload.try_next().await {
         // Extract field info
-        let content_disposition = field.content_disposition().expect("Missing content disposition");
-        let field_name = content_disposition.get_name().expect("Field name is required");
+        let content_disposition = field
+            .content_disposition()
+            .expect("Missing content disposition");
+        let field_name = content_disposition
+            .get_name()
+            .expect("Field name is required");
 
         // Only process if field is the logo
         if field_name != "logo" {
@@ -35,7 +39,9 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
         }
 
         // Extract file name and content type
-        let file_name = content_disposition.get_filename().expect("Filename is required");
+        let file_name = content_disposition
+            .get_filename()
+            .expect("Filename is required");
 
         let content_type = field.content_type().expect("Missing content type");
 
@@ -56,8 +62,9 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
         let unique_name = format!("university-logo-{}.{}", Uuid::new_v4(), file_ext);
         let file_path = upload_path.join(&unique_name);
 
-        // Create file
-        let mut file = web::block(|| std::fs::File::create(&file_path))
+        // Use move to capture the file_path by value
+        let file_path_for_closure = file_path.clone();
+        let mut file = web::block(move || std::fs::File::create(&file_path_for_closure))
             .await?
             .map_err(actix_web::error::ErrorInternalServerError)?;
 
@@ -80,8 +87,9 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
                 })));
             }
 
-            // Write chunk to file
-            file = web::block(move || file.write_all(&data).map(|_| file))
+            // Write chunk to file - use move to capture file by value
+            let data_clone = data.clone();
+            file = web::block(move || file.write_all(&data_clone).map(|_| file))
                 .await?
                 .map_err(actix_web::error::ErrorInternalServerError)?;
         }

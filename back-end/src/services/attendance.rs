@@ -1,12 +1,12 @@
-use sqlx::{Pool, Sqlite};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use anyhow::{Result};
-use std::net::IpAddr;
-use crate::models::attendance::{Attendance, AttendanceSubmission, AttendanceStats};
 use crate::db::attendance::AttendanceRepository;
+use crate::models::attendance::{Attendance, AttendanceStats, AttendanceSubmission};
 use crate::services::confirmation::ConfirmationCodeService;
 use crate::services::realtime::RealtimeService;
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use sqlx::{Pool, Sqlite};
+use std::net::IpAddr;
+use uuid::Uuid;
 
 /// Service for attendance operations
 pub struct AttendanceService {
@@ -19,12 +19,12 @@ impl AttendanceService {
     pub fn new(
         pool: Pool<Sqlite>,
         confirmation_service: ConfirmationCodeService,
-        realtime_service: RealtimeService
+        realtime_service: RealtimeService,
     ) -> Self {
         Self {
             pool,
             confirmation_service,
-            realtime_service
+            realtime_service,
         }
     }
 
@@ -32,12 +32,13 @@ impl AttendanceService {
     pub async fn submit_attendance(
         &self,
         submission: AttendanceSubmission,
-        ip_address: Option<IpAddr>
+        ip_address: Option<IpAddr>,
     ) -> Result<Attendance> {
         let repo = AttendanceRepository::new(self.pool.clone());
 
         // Validate the confirmation code
-        let is_valid = self.confirmation_service
+        let is_valid = self
+            .confirmation_service
             .validate_code(&submission.confirmation_code, submission.course_id)
             .await?;
 
@@ -46,7 +47,9 @@ impl AttendanceService {
         }
 
         // Check for duplicate submission
-        let has_attendance = repo.has_attendance_today(submission.course_id, &submission.student_id).await?;
+        let has_attendance = repo
+            .has_attendance_today(submission.course_id, &submission.student_id)
+            .await?;
         if has_attendance {
             return Err(anyhow::anyhow!("Attendance already recorded for today"));
         }
@@ -56,7 +59,8 @@ impl AttendanceService {
         let attendance = repo.record_attendance(submission, ip_str).await?;
 
         // Broadcast update to connected clients
-        self.broadcast_attendance_update(attendance.course_id).await?;
+        self.broadcast_attendance_update(attendance.course_id)
+            .await?;
 
         Ok(attendance)
     }
@@ -66,10 +70,11 @@ impl AttendanceService {
         &self,
         course_id: Uuid,
         start_date: Option<DateTime<Utc>>,
-        end_date: Option<DateTime<Utc>>
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<Attendance>> {
         let repo = AttendanceRepository::new(self.pool.clone());
-        repo.get_course_attendance(course_id, start_date, end_date).await
+        repo.get_course_attendance(course_id, start_date, end_date)
+            .await
     }
 
     /// Get attendance statistics for a course
@@ -100,13 +105,13 @@ impl AttendanceService {
 
         let count = sqlx::query_as::<_, (i64,)>(
             "SELECT COUNT(DISTINCT student_id) FROM attendance
-             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?"
+             WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
-            .bind(course_id.to_string())
-            .bind(today.to_rfc3339())
-            .bind(tomorrow.to_rfc3339())
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(course_id.to_string())
+        .bind(today.to_rfc3339())
+        .bind(tomorrow.to_rfc3339())
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(count.0)
     }
@@ -124,7 +129,9 @@ impl AttendanceService {
         });
 
         // Broadcast to connected clients
-        self.realtime_service.broadcast(course_id, &serde_json::to_string(&message)?).await;
+        self.realtime_service
+            .broadcast(course_id, &serde_json::to_string(&message)?)
+            .await;
 
         Ok(())
     }

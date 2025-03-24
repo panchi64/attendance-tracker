@@ -1,9 +1,9 @@
+use crate::db::course::CourseRepository;
+use crate::models::course::{Course, CourseCreation, CoursePartial};
+use crate::services::preference::PreferenceService;
+use anyhow::Result;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use anyhow::{Result};
-use crate::models::course::{Course, CourseCreation, CoursePartial};
-use crate::db::course::CourseRepository;
-use crate::services::preference::PreferenceService;
 
 /// Service for course operations
 pub struct CourseService {
@@ -13,7 +13,10 @@ pub struct CourseService {
 
 impl CourseService {
     pub fn new(pool: Pool<Sqlite>, preference_service: PreferenceService) -> Self {
-        Self { pool, preference_service }
+        Self {
+            pool,
+            preference_service,
+        }
     }
 
     /// List all courses
@@ -47,7 +50,9 @@ impl CourseService {
             logo_path: course.logo_path.clone(),
         };
 
-        self.preference_service.create_course(&course.name, course_prefs).await?;
+        self.preference_service
+            .create_course(&course.name, course_prefs)
+            .await?;
 
         Ok(created_course)
     }
@@ -73,7 +78,9 @@ impl CourseService {
                     logo_path: existing_course.logo_path.clone(),
                 };
 
-                self.preference_service.update_course(&existing_course.name, course_prefs).await?;
+                self.preference_service
+                    .update_course(&existing_course.name, course_prefs)
+                    .await?;
             }
         }
 
@@ -103,7 +110,10 @@ impl CourseService {
     }
 
     /// Switch to a different course
-    pub async fn switch_course(&self, course_name: &str) -> Result<Option<crate::models::preferences::CoursePreferences>> {
+    pub async fn switch_course(
+        &self,
+        course_name: &str,
+    ) -> Result<Option<crate::models::preferences::CoursePreferences>> {
         self.preference_service.switch_course(course_name).await
     }
 

@@ -1,11 +1,11 @@
-use actix_web::{post, get, web, HttpRequest, HttpResponse};
-use sqlx::{Pool, Sqlite};
-use uuid::Uuid;
-use chrono::{Utc, Datelike};
-use serde_json::json;
-use crate::models::attendance::{Attendance, AttendanceSubmission, AttendanceStats};
+use crate::models::attendance::{Attendance, AttendanceStats, AttendanceSubmission};
 use crate::services::confirmation::ConfirmationCodeService;
 use crate::utils::error::Error;
+use actix_web::{HttpRequest, HttpResponse, get, post, web};
+use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use serde_json::json;
+use sqlx::{Pool, Sqlite};
+use uuid::Uuid;
 
 #[post("/attendance")]
 pub async fn submit_attendance(
@@ -21,7 +21,10 @@ pub async fn submit_attendance(
 
     // Validate the confirmation code
     let is_valid = confirmation_service
-        .validate_code(&attendance_data.confirmation_code, attendance_data.course_id)
+        .validate_code(
+            &attendance_data.confirmation_code,
+            attendance_data.course_id,
+        )
         .await?;
 
     if !is_valid {
@@ -43,8 +46,8 @@ pub async fn submit_attendance(
         today.to_string(),
         tomorrow.to_string()
     )
-        .fetch_optional(&**db)
-        .await?;
+    .fetch_optional(&**db)
+    .await?;
 
     if existing.is_some() {
         return Ok(HttpResponse::BadRequest().json(json!({
@@ -86,16 +89,20 @@ pub async fn get_course_attendance(
     query: web::Query<AttendanceQuery>,
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
-    let course_id = Uuid::parse_str(&path.into_inner())
-        .map_err(|_| Error::validation("Invalid course ID"))?;
+    let course_id =
+        Uuid::parse_str(&path.into_inner()).map_err(|_| Error::validation("Invalid course ID"))?;
 
-    let start_date = query.start_date.as_deref()
+    let start_date = query
+        .start_date
+        .as_deref()
         .map(|date| chrono::DateTime::parse_from_rfc3339(date))
         .transpose()
         .map_err(|_| Error::validation("Invalid start date format"))?
         .map(|dt| dt.with_timezone(&Utc));
 
-    let end_date = query.end_date.as_deref()
+    let end_date = query
+        .end_date
+        .as_deref()
         .map(|date| chrono::DateTime::parse_from_rfc3339(date))
         .transpose()
         .map_err(|_| Error::validation("Invalid end date format"))?
@@ -112,24 +119,21 @@ pub async fn get_attendance_stats(
     path: web::Path<String>,
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
-    let course_id = Uuid::parse_str(&path.into_inner())
-        .map_err(|_| Error::validation("Invalid course ID"))?;
+    let course_id =
+        Uuid::parse_str(&path.into_inner()).map_err(|_| Error::validation("Invalid course ID"))?;
 
     // Get total attendance records
-    let total_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM attendance WHERE course_id = ?"
-    )
+    let total_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM attendance WHERE course_id = ?")
         .bind(course_id.to_string())
         .fetch_one(&**db)
         .await?;
 
     // Get unique student count
-    let unique_students: (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT student_id) FROM attendance WHERE course_id = ?"
-    )
-        .bind(course_id.to_string())
-        .fetch_one(&**db)
-        .await?;
+    let unique_students: (i64,) =
+        sqlx::query_as("SELECT COUNT(DISTINCT student_id) FROM attendance WHERE course_id = ?")
+            .bind(course_id.to_string())
+            .fetch_one(&**db)
+            .await?;
 
     // Get today's attendance count
     let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
@@ -137,13 +141,13 @@ pub async fn get_attendance_stats(
 
     let today_count: (i64,) = sqlx::query_as(
         "SELECT COUNT(DISTINCT student_id) FROM attendance
-         WHERE course_id = ? AND timestamp >= ? AND timestamp < ?"
+         WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
     )
-        .bind(course_id.to_string())
-        .bind(today.to_string())
-        .bind(tomorrow.to_string())
-        .fetch_one(&**db)
-        .await?;
+    .bind(course_id.to_string())
+    .bind(today.to_string())
+    .bind(tomorrow.to_string())
+    .fetch_one(&**db)
+    .await?;
 
     // Get attendance by date
     let attendance_by_date = sqlx::query!(
@@ -157,11 +161,11 @@ pub async fn get_attendance_stats(
          LIMIT 30",
         course_id.to_string()
     )
-        .fetch_all(&**db)
-        .await?
-        .into_iter()
-        .map(|row| (row.date, row.count as i64))
-        .collect();
+    .fetch_all(&**db)
+    .await?
+    .into_iter()
+    .map(|row| (row.date, row.count as i64))
+    .collect();
 
     let stats = AttendanceStats {
         total_records: total_count.0,
@@ -179,16 +183,20 @@ pub async fn export_attendance_csv(
     query: web::Query<AttendanceQuery>,
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
-    let course_id = Uuid::parse_str(&path.into_inner())
-        .map_err(|_| Error::validation("Invalid course ID"))?;
+    let course_id =
+        Uuid::parse_str(&path.into_inner()).map_err(|_| Error::validation("Invalid course ID"))?;
 
-    let start_date = query.start_date.as_deref()
+    let start_date = query
+        .start_date
+        .as_deref()
         .map(|date| chrono::DateTime::parse_from_rfc3339(date))
         .transpose()
         .map_err(|_| Error::validation("Invalid start date format"))?
         .map(|dt| dt.with_timezone(&Utc));
 
-    let end_date = query.end_date.as_deref()
+    let end_date = query
+        .end_date
+        .as_deref()
         .map(|date| chrono::DateTime::parse_from_rfc3339(date))
         .transpose()
         .map_err(|_| Error::validation("Invalid end date format"))?
@@ -199,27 +207,32 @@ pub async fn export_attendance_csv(
 
     // Create CSV
     let mut csv_data = Vec::new();
-    let mut wtr = csv::Writer::from_writer(&mut csv_data);
+    {
+        let mut wtr = csv::Writer::from_writer(&mut csv_data);
 
-    // Write header
-    wtr.write_record(&["Student ID", "Student Name", "Timestamp", "IP Address"])?;
+        // Write header
+        wtr.write_record(&["Student ID", "Student Name", "Timestamp", "IP Address"])?;
 
-    // Write records
-    for record in records {
-        wtr.write_record(&[
-            &record.student_id,
-            &record.student_name,
-            &record.timestamp.to_rfc3339(),
-            &record.ip_address.unwrap_or_default(),
-        ])?;
-    }
+        // Write records
+        for record in records {
+            wtr.write_record(&[
+                &record.student_id,
+                &record.student_name,
+                &record.timestamp.to_rfc3339(),
+                &record.ip_address.unwrap_or_default(),
+            ])?;
+        }
 
-    wtr.flush()?;
+        wtr.flush()?;
+    } // wtr is dropped here, releasing the borrow on csv_data
 
     // Return CSV
     Ok(HttpResponse::Ok()
         .content_type("text/csv")
-        .append_header(("Content-Disposition", "attachment; filename=\"attendance.csv\""))
+        .append_header((
+            "Content-Disposition",
+            "attachment; filename=\"attendance.csv\"",
+        ))
         .body(csv_data))
 }
 
@@ -234,11 +247,22 @@ async fn get_attendance_records(
     let mut query_str = String::from(
         "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
          FROM attendance
-         WHERE course_id = ?"
+         WHERE course_id = ?",
     );
 
     // Build query with parameters
-    let mut query = sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str);
+    let mut query = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+        ),
+    >(&query_str);
 
     // Add course_id
     query = query.bind(course_id.to_string());
@@ -283,20 +307,35 @@ async fn get_attendance_records(
     let records = query.fetch_all(db).await?;
 
     // Convert to Attendance objects
-    let result = records.into_iter()
-        .map(|(id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address)| {
-            Attendance {
-                id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
-                course_id: Uuid::parse_str(&course_id).unwrap_or_else(|_| Uuid::nil()),
+    let result = records
+        .into_iter()
+        .map(
+            |(
+                id,
+                course_id,
                 student_name,
                 student_id,
-                timestamp: chrono::DateTime::parse_from_rfc3339(&timestamp)
-                    .unwrap_or_else(|_| chrono::DateTime::from_timestamp(0, 0).unwrap())
-                    .with_timezone(&Utc),
+                timestamp,
                 confirmation_code,
                 ip_address,
-            }
-        })
+            )| {
+                Attendance {
+                    id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
+                    course_id: Uuid::parse_str(&course_id).unwrap_or_else(|_| Uuid::nil()),
+                    student_name,
+                    student_id,
+                    timestamp: DateTime::from(
+                        chrono::DateTime::parse_from_rfc3339(&timestamp).unwrap_or_else(|_| {
+                            // Create a UTC timestamp at Unix epoch (1970-01-01)
+                            let naive = DateTime::from_timestamp(0, 0).unwrap().date_naive();
+                            DateTime::from_naive_utc_and_offset(NaiveDateTime::from(naive), Utc)
+                        }),
+                    ),
+                    confirmation_code,
+                    ip_address,
+                }
+            },
+        )
         .collect();
 
     Ok(result)

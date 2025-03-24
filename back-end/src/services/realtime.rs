@@ -1,9 +1,9 @@
-use tokio::sync::RwLock;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use uuid::Uuid;
-use anyhow::Result;
-use serde::{Serialize, Deserialize};
 
 // The following is a simplified implementation that doesn't use actix WebSockets.
 // For a full implementation, you'd need to add the actix and actix-web-actors dependencies
@@ -23,7 +23,10 @@ pub struct WebSocketSession {
 impl WebSocketSession {
     pub fn new(course_id: Uuid, realtime_service: Arc<RealtimeService>) -> Self {
         let client_id = Uuid::new_v4().to_string();
-        let session = Self { course_id, client_id };
+        let session = Self {
+            course_id,
+            client_id,
+        };
 
         // In real implementation with actix, we'd register the client here
         let _ = realtime_service.clone();
@@ -72,8 +75,12 @@ impl RealtimeService {
         // In a real implementation, this would send WebSocket messages to clients
         let clients = self.clients.read().await;
         if let Some(course_clients) = clients.get(&course_id) {
-            println!("Broadcasting to {} clients for course {}: {}",
-                     course_clients.len(), course_id, message);
+            println!(
+                "Broadcasting to {} clients for course {}: {}",
+                course_clients.len(),
+                course_id,
+                message
+            );
             // In real implementation, you'd iterate through clients and send message
         }
     }
@@ -86,13 +93,12 @@ impl RealtimeService {
 }
 
 // This is a placeholder for the WebSocket handler that would be implemented with actix_web
-pub async fn ws_handler(
-    course_id: Uuid,
-    realtime_service: Arc<RealtimeService>,
-) -> Result<String> {
+pub async fn ws_handler(course_id: Uuid, realtime_service: Arc<RealtimeService>) -> Result<String> {
     // In real implementation, this would handle the WebSocket connection
     let client_id = Uuid::new_v4().to_string();
-    realtime_service.register(course_id, client_id.clone()).await?;
+    realtime_service
+        .register(course_id, client_id.clone())
+        .await?;
 
     // Return success message (in real implementation, this would create the WebSocket)
     Ok(format!("WebSocket connected for course {}", course_id))

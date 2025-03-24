@@ -1,9 +1,9 @@
+use crate::db::attendance::AttendanceRepository;
+use crate::models::attendance::AttendanceStats;
+use anyhow::Result;
+use chrono::{DateTime, Datelike, Duration, Utc};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use chrono::{Utc, Duration, Datelike, DateTime};
-use anyhow::Result;
-use crate::models::attendance::AttendanceStats;
-use crate::db::attendance::AttendanceRepository;
 
 /// Service for generating statistics and reports
 pub struct StatisticsService {
@@ -22,7 +22,10 @@ impl StatisticsService {
     }
 
     /// Get attendance rate by student
-    pub async fn get_student_attendance_rates(&self, course_id: Uuid) -> Result<Vec<(String, String, f64)>> {
+    pub async fn get_student_attendance_rates(
+        &self,
+        course_id: Uuid,
+    ) -> Result<Vec<(String, String, f64)>> {
         // First get the total number of class days
         let class_days = self.count_class_days(course_id).await?;
 
@@ -39,11 +42,12 @@ impl StatisticsService {
              ORDER BY student_name",
             course_id.to_string()
         )
-            .fetch_all(&self.pool)
-            .await?;
+        .fetch_all(&self.pool)
+        .await?;
 
         // Calculate attendance rates
-        let rates = records.into_iter()
+        let rates = records
+            .into_iter()
             .map(|row| {
                 let days_present = row.days_present as f64;
                 let rate = (days_present / class_days as f64) * 100.0;
@@ -57,17 +61,21 @@ impl StatisticsService {
     /// Count the number of distinct class days for a course
     pub async fn count_class_days(&self, course_id: Uuid) -> Result<i64> {
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(DISTINCT date(timestamp)) FROM attendance WHERE course_id = ?"
+            "SELECT COUNT(DISTINCT date(timestamp)) FROM attendance WHERE course_id = ?",
         )
-            .bind(course_id.to_string())
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(course_id.to_string())
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(count.0)
     }
 
     /// Get attendance trend over time
-    pub async fn get_attendance_trend(&self, course_id: Uuid, days: i64) -> Result<Vec<(String, i64)>> {
+    pub async fn get_attendance_trend(
+        &self,
+        course_id: Uuid,
+        days: i64,
+    ) -> Result<Vec<(String, i64)>> {
         let start_date = Utc::now() - Duration::days(days);
 
         let records = sqlx::query!(
@@ -81,10 +89,11 @@ impl StatisticsService {
             course_id.to_string(),
             start_date.to_rfc3339()
         )
-            .fetch_all(&self.pool)
-            .await?;
+        .fetch_all(&self.pool)
+        .await?;
 
-        let trend = records.into_iter()
+        let trend = records
+            .into_iter()
             .map(|row| (row.date, row.count as i64))
             .collect();
 
@@ -104,7 +113,9 @@ impl StatisticsService {
         let repo = AttendanceRepository::new(self.pool.clone());
         let week_start_utc = DateTime::from_naive_utc_and_offset(week_start, Utc);
         let week_end_utc = DateTime::from_naive_utc_and_offset(week_end, Utc);
-        let attendance = repo.get_course_attendance(course_id, Some(week_start_utc), Some(week_end_utc)).await?;
+        let attendance = repo
+            .get_course_attendance(course_id, Some(week_start_utc), Some(week_end_utc))
+            .await?;
 
         // Group by day of week
         let mut daily_counts = vec![0; 7];
