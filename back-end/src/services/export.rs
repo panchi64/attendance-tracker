@@ -1,3 +1,9 @@
+use sqlx::{Pool, Sqlite};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use anyhow::Result;
+use crate::models::attendance::{Attendance, AttendanceRecord};
+
 pub struct ExportService {
     db: Pool<Sqlite>,
 }
@@ -36,38 +42,62 @@ impl ExportService {
 
     async fn get_attendance_records(&self, course_id: Uuid, start_date: Option<DateTime<Utc>>, end_date: Option<DateTime<Utc>>) -> Result<Vec<Attendance>> {
         // Construct query based on date range
-        let mut query = String::from(
+        let mut query_str = String::from(
             "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
              FROM attendance
              WHERE course_id = ?"
         );
 
-        let mut params = vec![course_id.to_string()];
+        // Build query with parameters
+        let mut query = sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str);
 
-        if let Some(start) = start_date {
-            query.push_str(" AND timestamp >= ?");
-            params.push(start.to_rfc3339());
+        // Add course_id
+        query = query.bind(course_id.to_string());
+
+        // Add date filters if provided
+        if let Some(start) = &start_date {
+            query_str.push_str(" AND timestamp >= ?");
+            query = sqlx::query_as(&query_str);
+            query = query.bind(course_id.to_string());
+            query = query.bind(start.to_rfc3339());
         }
 
-        if let Some(end) = end_date {
-            query.push_str(" AND timestamp <= ?");
-            params.push(end.to_rfc3339());
+        if let Some(end) = &end_date {
+            query_str.push_str(" AND timestamp <= ?");
+            query = sqlx::query_as(&query_str);
+            query = query.bind(course_id.to_string());
+
+            if start_date.is_some() {
+                query = query.bind(start_date.unwrap().to_rfc3339());
+            }
+
+            query = query.bind(end.to_rfc3339());
         }
 
-        query.push_str(" ORDER BY timestamp");
+        // Order by timestamp
+        query_str.push_str(" ORDER BY timestamp DESC");
+        query = sqlx::query_as(&query_str);
+        query = query.bind(course_id.to_string());
 
-        // Execute the query with dynamic parameters
-        // (simplified implementation - in a real app would use prepared statements properly)
-        let records = sqlx::query_as::<_, AttendanceRecord>(&query)
-            .bind(&params[0])
-            .bind_if_some(params.get(1).cloned())
-            .bind_if_some(params.get(2).cloned())
-            .fetch_all(&self.db)
-            .await?
-            .into_iter()
+        if let Some(start) = &start_date {
+            query = query.bind(start.to_rfc3339());
+        }
+
+        if let Some(end) = &end_date {
+            if start_date.is_some() {
+                query = query.bind(start_date.unwrap().to_rfc3339());
+            }
+            query = query.bind(end.to_rfc3339());
+        }
+
+        // Execute the query
+        let records = query.fetch_all(&self.db).await?;
+
+        // Convert to Attendance objects
+        let result = records.into_iter()
             .map(Attendance::from)
             .collect();
 
-        Ok(records)
+        Ok(result)
     }
 }

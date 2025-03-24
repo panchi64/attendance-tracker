@@ -1,7 +1,7 @@
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use chrono::{DateTime, Utc, Duration};
-use anyhow::{Result, Context};
+use chrono::{Utc, Duration, Datelike, DateTime};
+use anyhow::Result;
 use crate::models::attendance::AttendanceStats;
 use crate::db::attendance::AttendanceRepository;
 
@@ -95,13 +95,16 @@ impl StatisticsService {
     pub async fn generate_weekly_report(&self, course_id: Uuid) -> Result<serde_json::Value> {
         // Get week boundaries
         let now = Utc::now();
-        let week_start = now - Duration::days(now.weekday().num_days_from_monday() as i64);
-        let week_start = week_start.date().and_hms(0, 0, 0);
+        let weekday_num = now.weekday().num_days_from_monday() as i64;
+        let week_start = now - Duration::days(weekday_num);
+        let week_start = week_start.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let week_end = week_start + Duration::days(7);
 
         // Get attendance stats for the week
         let repo = AttendanceRepository::new(self.pool.clone());
-        let attendance = repo.get_course_attendance(course_id, Some(week_start), Some(week_end)).await?;
+        let week_start_utc = DateTime::from_naive_utc_and_offset(week_start, Utc);
+        let week_end_utc = DateTime::from_naive_utc_and_offset(week_end, Utc);
+        let attendance = repo.get_course_attendance(course_id, Some(week_start_utc), Some(week_end_utc)).await?;
 
         // Group by day of week
         let mut daily_counts = vec![0; 7];
@@ -115,8 +118,8 @@ impl StatisticsService {
 
         // Format JSON response
         let report = serde_json::json!({
-            "week_start": week_start.to_rfc3339(),
-            "week_end": week_end.to_rfc3339(),
+            "week_start": week_start_utc.to_rfc3339(),
+            "week_end": week_end_utc.to_rfc3339(),
             "total_records": attendance.len(),
             "unique_students": unique_students.len(),
             "daily_counts": {

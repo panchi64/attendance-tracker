@@ -26,10 +26,8 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
     // Process uploaded file
     while let Ok(Some(mut field)) = payload.try_next().await {
         // Extract field info
-        let content_disposition = field.content_disposition();
-        let field_name = content_disposition
-            .get_name()
-            .ok_or_else(|| actix_web::error::ErrorBadRequest("Field name is required"))?;
+        let content_disposition = field.content_disposition().expect("Missing content disposition");
+        let field_name = content_disposition.get_name().expect("Field name is required");
 
         // Only process if field is the logo
         if field_name != "logo" {
@@ -37,11 +35,9 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
         }
 
         // Extract file name and content type
-        let file_name = content_disposition
-            .get_filename()
-            .ok_or_else(|| actix_web::error::ErrorBadRequest("Filename is required"))?;
+        let file_name = content_disposition.get_filename().expect("Filename is required");
 
-        let content_type = field.content_type();
+        let content_type = field.content_type().expect("Missing content type");
 
         // Validate content type
         if !is_valid_image(content_type) {

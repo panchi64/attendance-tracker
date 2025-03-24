@@ -35,6 +35,15 @@ pub enum Error {
     #[error("File upload error: {0}")]
     Upload(String),
 
+    #[error("UUID error: {0}")]
+    UuidError(#[from] uuid::Error),
+
+    #[error("Chrono parse error: {0}")]
+    ChronoError(#[from] chrono::ParseError),
+
+    #[error("CSV error: {0}")]
+    CsvError(#[from] csv::Error),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -53,17 +62,6 @@ struct ErrorResponse {
 
 // Implement ResponseError for our custom Error type
 impl ResponseError for Error {
-    fn error_response(&self) -> HttpResponse {
-        let status_code = self.status_code();
-
-        HttpResponse::build(status_code)
-            .json(ErrorResponse {
-                success: false,
-                message: self.to_string(),
-                error_code: Some(self.error_code()),
-            })
-    }
-
     fn status_code(&self) -> actix_web::http::StatusCode {
         use actix_web::http::StatusCode;
 
@@ -78,8 +76,22 @@ impl ResponseError for Error {
             Error::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ExternalService(_) => StatusCode::BAD_GATEWAY,
             Error::Upload(_) => StatusCode::BAD_REQUEST,
+            Error::UuidError(_) => StatusCode::BAD_REQUEST,
+            Error::ChronoError(_) => StatusCode::BAD_REQUEST,
+            Error::CsvError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        let status_code = self.status_code();
+
+        HttpResponse::build(status_code)
+            .json(ErrorResponse {
+                success: false,
+                message: self.to_string(),
+                error_code: Some(self.error_code()),
+            })
     }
 }
 
@@ -98,6 +110,9 @@ impl Error {
             Error::Internal(_) => "INTERNAL_ERROR".to_string(),
             Error::ExternalService(_) => "EXTERNAL_SERVICE_ERROR".to_string(),
             Error::Upload(_) => "UPLOAD_ERROR".to_string(),
+            Error::UuidError(_) => "UUID_ERROR".to_string(),
+            Error::ChronoError(_) => "CHRONO_ERROR".to_string(),
+            Error::CsvError(_) => "CSV_ERROR".to_string(),
             Error::Other(_) => "UNKNOWN_ERROR".to_string(),
         }
     }

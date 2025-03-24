@@ -25,15 +25,16 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
             let mut tx = pool.begin().await?;
 
             // Run migration
-            query(migration)
-                .execute(&mut tx)
+            // Use execute directly on tx (which implements Executor) instead of &mut tx
+            sqlx::query(migration)
+                .execute(&mut *tx)
                 .await
                 .context(format!("Failed to apply migration {}", version))?;
 
             // Update version
-            query("UPDATE schema_migrations SET version = ?")
+            sqlx::query("UPDATE schema_migrations SET version = ?")
                 .bind(version)
-                .execute(&mut tx)
+                .execute(&mut *tx)
                 .await
                 .context("Failed to update schema version")?;
 

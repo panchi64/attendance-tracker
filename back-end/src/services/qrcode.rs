@@ -1,3 +1,7 @@
+use anyhow::Result;
+use qrcode::QrCode;
+use image::Luma;
+
 pub struct QrCodeService;
 
 impl QrCodeService {
