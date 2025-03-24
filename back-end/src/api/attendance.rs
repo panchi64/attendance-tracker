@@ -243,82 +243,62 @@ async fn get_attendance_records(
     start_date: Option<chrono::DateTime<Utc>>,
     end_date: Option<chrono::DateTime<Utc>>,
 ) -> Result<Vec<Attendance>, Error> {
-    // Base query
-    let mut query_str = String::from(
+    // Build query conditions
+    let mut conditions = vec!["course_id = ?"];
+    let mut params: Vec<String> = vec![course_id.to_string()];
+
+    if let Some(start) = &start_date {
+        conditions.push("timestamp >= ?");
+        params.push(start.to_rfc3339());
+    }
+
+    if let Some(end) = &end_date {
+        conditions.push("timestamp <= ?");
+        params.push(end.to_rfc3339());
+    }
+
+    // Construct query string
+    let query_str = format!(
         "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
          FROM attendance
-         WHERE course_id = ?",
+         WHERE {}
+         ORDER BY timestamp DESC",
+        conditions.join(" AND ")
     );
 
-    // Build query with parameters
-    let mut query = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-        ),
-    >(&query_str);
-
-    // Add course_id
-    query = query.bind(course_id.to_string());
-
-    // Add date filters if provided
-    if let Some(start) = &start_date {
-        query_str.push_str(" AND timestamp >= ?");
-        query = sqlx::query_as(&query_str);
-        query = query.bind(course_id.to_string());
-        query = query.bind(start.to_rfc3339());
-    }
-
-    if let Some(end) = &end_date {
-        query_str.push_str(" AND timestamp <= ?");
-        query = sqlx::query_as(&query_str);
-        query = query.bind(course_id.to_string());
-
-        if start_date.is_some() {
-            query = query.bind(start_date.unwrap().to_rfc3339());
-        }
-
-        query = query.bind(end.to_rfc3339());
-    }
-
-    // Order by timestamp
-    query_str.push_str(" ORDER BY timestamp DESC");
-    query = sqlx::query_as(&query_str);
-    query = query.bind(course_id.to_string());
-
-    if let Some(start) = &start_date {
-        query = query.bind(start.to_rfc3339());
-    }
-
-    if let Some(end) = &end_date {
-        if start_date.is_some() {
-            query = query.bind(start_date.unwrap().to_rfc3339());
-        }
-        query = query.bind(end.to_rfc3339());
-    }
-
-    // Execute query
-    let records = query.fetch_all(db).await?;
+    // Execute query based on params length
+    let records = match params.len() {
+        1 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+            .bind(&params[0])
+            .fetch_all(db)
+            .await?,
+        2 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+            .bind(&params[0])
+            .bind(&params[1])
+            .fetch_all(db)
+            .await?,
+        3 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+            .bind(&params[0])
+            .bind(&params[1])
+            .bind(&params[2])
+            .fetch_all(db)
+            .await?,
+        _ => vec![],
+    };
 
     // Convert to Attendance objects
     let result = records
         .into_iter()
         .map(
             |(
-                id,
-                course_id,
-                student_name,
-                student_id,
-                timestamp,
-                confirmation_code,
-                ip_address,
-            )| {
+                 id,
+                 course_id,
+                 student_name,
+                 student_id,
+                 timestamp,
+                 confirmation_code,
+                 ip_address,
+             )| {
                 Attendance {
                     id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
                     course_id: Uuid::parse_str(&course_id).unwrap_or_else(|_| Uuid::nil()),

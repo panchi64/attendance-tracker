@@ -6,18 +6,18 @@ use actix_web::{
     http::header,
 };
 use futures::future::{LocalBoxFuture, Ready, ready};
-use std::rc::Rc;
+use std::sync::Arc;  // Change from Rc to Arc for thread-safety
 
 // Auth middleware factory
 #[derive(Clone)]
 pub struct AuthMiddleware {
-    auth_service: Rc<AuthService>,
+    auth_service: Arc<AuthService>,  // Changed from Rc to Arc
 }
 
 impl AuthMiddleware {
     pub fn new(auth_service: AuthService) -> Self {
         Self {
-            auth_service: Rc::new(auth_service),
+            auth_service: Arc::new(auth_service),  // Wrap in Arc instead of Rc
         }
     }
 }
@@ -46,7 +46,7 @@ where
 // Middleware service
 pub struct AuthMiddlewareService<S> {
     service: S,
-    auth_service: Rc<AuthService>,
+    auth_service: Arc<AuthService>,  // Changed from Rc to Arc
 }
 
 impl<S, B> Service<ServiceRequest> for AuthMiddlewareService<S>

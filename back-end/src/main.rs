@@ -1,5 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware::Logger, web};
+use actix_web_actors::ws;
 use dotenv::dotenv;
 use local_ip_address::local_ip;
 use log::{error, info};
@@ -144,7 +145,7 @@ async fn main() -> std::io::Result<()> {
                 let origin_str = origin.to_str().unwrap_or("");
                 origin_str.starts_with("http://localhost:")
                     || origin_str.starts_with(&format!("http://{}:", local_ip))
-                    || origin_str.starts_with(&format!("http://127.0.0.1:"))
+                    || origin_str.starts_with(&"http://127.0.0.1:".to_string())
             })
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec!["Authorization", "Content-Type"])
@@ -229,7 +230,7 @@ async fn main() -> std::io::Result<()> {
             Err(_) => return Err(actix_web::error::ErrorBadRequest("Invalid course ID")),
         };
 
-        // Create WebSocket session
+        // Create WebSocket session with the Arc<RealtimeService>
         let ws_session = services::realtime::WebSocketSession::new(course_id, realtime_service.get_ref().clone());
 
         // Start WebSocket connection
