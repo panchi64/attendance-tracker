@@ -1,15 +1,13 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorTooManyRequests,
-    Error, HttpMessage,
+    Error,
 };
 use futures::future::{ready, LocalBoxFuture, Ready};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Mutex;
-use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use std::rc::Rc;
 
 // Rate limiter configuration
 #[derive(Clone)]
@@ -67,8 +65,8 @@ where
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
-    type InitError = ();
     type Transform = RateLimiterMiddleware<S>;
+    type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {

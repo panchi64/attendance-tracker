@@ -1,6 +1,6 @@
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use crate::db::course::CourseRepository;
 use crate::services::preference::PreferenceService;

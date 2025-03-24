@@ -1,7 +1,7 @@
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use std::net::IpAddr;
 use crate::models::attendance::{Attendance, AttendanceSubmission, AttendanceStats};
 use crate::db::attendance::AttendanceRepository;
@@ -95,7 +95,7 @@ impl AttendanceService {
     pub async fn count_present_students(&self, course_id: Uuid) -> Result<i64> {
         let repo = AttendanceRepository::new(self.pool.clone());
 
-        let today = Utc::now().date().and_hms(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
         let tomorrow = today + chrono::Duration::days(1);
 
         let count = sqlx::query_as::<_, (i64,)>(

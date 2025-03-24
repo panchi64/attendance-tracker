@@ -1,5 +1,5 @@
 use sqlx::{Pool, Sqlite};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use crate::models::preferences::{Preferences, CoursePreferences};
 use crate::db::preferences::PreferencesRepository;
 

@@ -2,7 +2,7 @@ use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use mime::Mime;
 
 /// Service for file storage operations

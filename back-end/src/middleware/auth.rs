@@ -5,10 +5,7 @@ use actix_web::{
     Error, HttpMessage,
 };
 use futures::future::{ready, LocalBoxFuture, Ready};
-use std::future::Future;
-use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{Context, Poll};
 use crate::services::auth::AuthService;
 use crate::models::user::Claims;
 

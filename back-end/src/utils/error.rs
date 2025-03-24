@@ -1,6 +1,5 @@
 use actix_web::{error::ResponseError, HttpResponse};
 use serde::Serialize;
-use std::fmt;
 use thiserror::Error;
 
 // Application-specific error types

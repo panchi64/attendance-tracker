@@ -1,6 +1,7 @@
 use tokio::sync::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use actix_web::Handler;
 use uuid::Uuid;
 use actix::{Actor, Addr, Message, Handler, StreamHandler, ActorContext, Running};
 use actix_web_actors::ws;

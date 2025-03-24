@@ -1,7 +1,6 @@
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use reqwest::Client;
 use std::collections::HashMap;
 use crate::db::attendance::AttendanceRepository;

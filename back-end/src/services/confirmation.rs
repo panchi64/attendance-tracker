@@ -1,3 +1,10 @@
+use chrono::{DateTime, Utc};
+use qrcode::types::Mode::Alphanumeric;
+use rand::Rng;
+use sqlx::{Pool, Sqlite};
+use uuid::Uuid;
+use crate::models::confirmation_code::ConfirmationCode;
+
 pub struct ConfirmationCodeService {
     db: Pool<Sqlite>,
 }
@@ -10,7 +17,7 @@ impl ConfirmationCodeService {
     // Generate a new random confirmation code
     pub async fn generate_code(&self, course_id: Uuid, expiry_mins: i64) -> Result<ConfirmationCode> {
         // Generate random alphanumeric code
-        let code = rand::thread_rng()
+        let code = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(6)
             .map(char::from)

@@ -47,7 +47,7 @@ impl AttendanceRepository {
 
     /// Check if student has already marked attendance today
     pub async fn has_attendance_today(&self, course_id: Uuid, student_id: &str) -> Result<bool> {
-        let today = Utc::now().date().and_hms(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
         let tomorrow = today + chrono::Duration::days(1);
 
         let count: (i64,) = sqlx::query_as(
