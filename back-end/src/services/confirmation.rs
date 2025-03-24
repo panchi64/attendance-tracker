@@ -1,8 +1,9 @@
-use chrono::{DateTime, Utc};
-use qrcode::types::Mode::Alphanumeric;
-use rand::Rng;
+use chrono::{DateTime, Utc, Duration};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
+use anyhow::Result;
+use rand::{rng, Rng};
+use rand::distr::Alphanumeric;
 use crate::models::confirmation_code::ConfirmationCode;
 
 pub struct ConfirmationCodeService {
@@ -17,13 +18,13 @@ impl ConfirmationCodeService {
     // Generate a new random confirmation code
     pub async fn generate_code(&self, course_id: Uuid, expiry_mins: i64) -> Result<ConfirmationCode> {
         // Generate random alphanumeric code
-        let code = rand::rng()
+        let code: String = rng()
             .sample_iter(&Alphanumeric)
             .take(6)
             .map(char::from)
-            .collect::<String>();
+            .collect();
 
-        let expires_at = Utc::now() + chrono::Duration::minutes(expiry_mins);
+        let expires_at = Utc::now() + Duration::minutes(expiry_mins);
 
         // Store in database
         sqlx::query!(
@@ -31,8 +32,8 @@ impl ConfirmationCodeService {
              VALUES (?, ?, ?, ?)",
             code,
             course_id.to_string(),
-            expires_at,
-            Utc::now()
+            expires_at.to_rfc3339(),
+            Utc::now().to_rfc3339()
         )
             .execute(&self.db)
             .await?;
@@ -57,7 +58,10 @@ impl ConfirmationCodeService {
             .await?;
 
         if let Some(record) = result {
-            let expires_at: DateTime<Utc> = record.expires_at.parse()?;
+            let expires_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&record.expires_at)
+                .map_err(|e| anyhow::anyhow!("Failed to parse expires_at: {}", e))?
+                .with_timezone(&Utc);
+
             return Ok(Utc::now() < expires_at);
         }
 

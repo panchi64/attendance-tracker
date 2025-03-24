@@ -1,10 +1,13 @@
-#[derive(Debug, Serialize, Deserialize)]
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Preferences {
     pub current_course: String,
     pub courses: HashMap<String, CoursePreferences>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CoursePreferences {
     pub course_name: String,
     pub section_number: String,
