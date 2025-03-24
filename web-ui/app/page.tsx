@@ -112,7 +112,7 @@ export default function Dashboard() {
             <div className="ml-6">
               {isEditingOfficeHours && isCustomizing ? (
                 <div>
-                  <div className="text-gray-700 text-2xl font-semibold">Office Hours</div>
+                  <div className="text-gray-500 text-2xl font-semibold">Office Hours</div>
                   <input
                     ref={officeHoursInputRef}
                     type="text"
@@ -128,7 +128,7 @@ export default function Dashboard() {
                   onClick={() => isCustomizing && setIsEditingOfficeHours(true)}
                   className={isCustomizing ? "cursor-pointer" : ""}
                 >
-                  <div className="text-gray-700 text-2xl font-semibold">Office Hours</div>
+                  <div className="text-gray-400 text-2xl font-semibold">Office Hours</div>
                   <div className="text-3xl text-gray-800 font-medium mt-1">{officeHours}</div>
                 </div>
               )}
