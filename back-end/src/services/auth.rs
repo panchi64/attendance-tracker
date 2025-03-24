@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::models::user::{Claims, User};
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};

@@ -98,9 +98,9 @@ impl AttendanceService {
 
     /// Count present students for a course
     pub async fn count_present_students(&self, course_id: Uuid) -> Result<i64> {
-        let repo = AttendanceRepository::new(self.pool.clone());
+        let _repo = AttendanceRepository::new(self.pool.clone());
 
-        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
         let tomorrow = today + chrono::Duration::days(1);
 
         let count = sqlx::query_as::<_, (i64,)>(
@@ -108,8 +108,8 @@ impl AttendanceService {
              WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
         .bind(course_id.to_string())
-        .bind(today.to_rfc3339())
-        .bind(tomorrow.to_rfc3339())
+        .bind(today.and_utc().to_rfc3339())
+        .bind(tomorrow.and_utc().to_rfc3339())
         .fetch_one(&self.pool)
         .await?;
 

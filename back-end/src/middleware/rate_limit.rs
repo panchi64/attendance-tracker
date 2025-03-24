@@ -35,7 +35,6 @@ struct ClientTracker {
 #[derive(Clone)]
 pub struct RateLimiter {
     config: RateLimiterConfig,
-    // Use Arc instead of Mutex for interior mutability in a sync context
     clients: Arc<Mutex<HashMap<IpAddr, ClientTracker>>>,
 }
 
@@ -43,7 +42,7 @@ impl RateLimiter {
     pub fn new(config: RateLimiterConfig) -> Self {
         Self {
             config,
-            clients: Mutex::new(HashMap::new()),
+            clients: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -90,10 +89,13 @@ where
 pub struct RateLimiterMiddleware<S> {
     service: S,
     config: RateLimiterConfig,
-    clients: Mutex<HashMap<IpAddr, ClientTracker>>,
+    clients: Arc<Mutex<HashMap<IpAddr, ClientTracker>>>,
 }
 
-impl Clone for RateLimiterMiddleware<S> {
+impl<S> Clone for RateLimiterMiddleware<S>
+where
+    S: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             service: self.service.clone(),
@@ -140,7 +142,7 @@ where
                 tracker.requests_in_window = 0;
             }
 
-            // Check if under rate limit
+            // Check if under the rate limit
             let under_limit = tracker.requests_in_window < self.config.requests_per_minute;
 
             // Update tracker

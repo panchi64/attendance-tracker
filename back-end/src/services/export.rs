@@ -55,57 +55,53 @@ impl ExportService {
         start_date: Option<DateTime<Utc>>,
         end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<Attendance>> {
-        // Construct query based on date range
+        // Build query string with placeholders
         let mut query_str = String::from(
             "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
-             FROM attendance
-             WHERE course_id = ?"
+         FROM attendance
+         WHERE course_id = ?"
         );
 
-        // Build query with parameters
-        let mut query = sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str);
-
-        // Add course_id
-        query = query.bind(course_id.to_string());
-
         // Add date filters if provided
-        if let Some(start) = &start_date {
+        if start_date.is_some() {
             query_str.push_str(" AND timestamp >= ?");
-            query = sqlx::query_as(&query_str);
-            query = query.bind(course_id.to_string());
-            query = query.bind(start.to_rfc3339());
         }
 
-        if let Some(end) = &end_date {
+        if end_date.is_some() {
             query_str.push_str(" AND timestamp <= ?");
-            query = sqlx::query_as(&query_str);
-            query = query.bind(course_id.to_string());
-
-            if start_date.is_some() {
-                query = query.bind(start_date.unwrap().to_rfc3339());
-            }
-
-            query = query.bind(end.to_rfc3339());
         }
 
-        // Order by timestamp
+        // Add ordering
         query_str.push_str(" ORDER BY timestamp DESC");
-        query = sqlx::query_as(&query_str);
-        query = query.bind(course_id.to_string());
 
+        // Create parameter vector
+        let mut params = vec![course_id.to_string()];
         if let Some(start) = &start_date {
-            query = query.bind(start.to_rfc3339());
+            params.push(start.to_rfc3339());
         }
-
         if let Some(end) = &end_date {
-            if start_date.is_some() {
-                query = query.bind(start_date.unwrap().to_rfc3339());
-            }
-            query = query.bind(end.to_rfc3339());
+            params.push(end.to_rfc3339());
         }
 
-        // Execute the query
-        let records = query.fetch_all(&self.db).await?;
+        // Execute query based on the number of parameters
+        let records = match params.len() {
+            1 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .fetch_all(&self.db)
+                .await?,
+            2 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .bind(&params[1])
+                .fetch_all(&self.db)
+                .await?,
+            3 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .bind(&params[1])
+                .bind(&params[2])
+                .fetch_all(&self.db)
+                .await?,
+            _ => vec![],
+        };
 
         // Convert to Attendance objects
         let result = records.into_iter().map(Attendance::from).collect();

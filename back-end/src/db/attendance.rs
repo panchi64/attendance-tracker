@@ -1,9 +1,9 @@
 use crate::models::attendance::{
     Attendance, AttendanceRecord, AttendanceStats, AttendanceSubmission,
 };
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use chrono::{DateTime, Utc};
-use sqlx::{Pool, Sqlite, query, query_as};
+use sqlx::{Pool, Sqlite, query};
 use uuid::Uuid;
 
 /// Repository for attendance operations
@@ -77,56 +77,55 @@ impl AttendanceRepository {
         start_date: Option<DateTime<Utc>>,
         end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<Attendance>> {
-        // Base query
-        let mut query_str = String::from(
-            "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
-             FROM attendance
-             WHERE course_id = ?"
-        );
+        let mut conditions = vec!["course_id = ?"];
+        let mut params: Vec<String> = vec![course_id.to_string()];
 
-        // Add date filters if provided
         if start_date.is_some() {
-            query_str.push_str(" AND timestamp >= ?");
+            conditions.push("timestamp >= ?");
+            params.push(start_date.unwrap().to_rfc3339());
         }
 
         if end_date.is_some() {
-            query_str.push_str(" AND timestamp <= ?");
+            conditions.push("timestamp <= ?");
+            params.push(end_date.unwrap().to_rfc3339());
         }
 
-        // Order by timestamp
-        query_str.push_str(" ORDER BY timestamp DESC");
+        let query_str = format!(
+            "SELECT id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address
+         FROM attendance
+         WHERE {}
+         ORDER BY timestamp DESC",
+            conditions.join(" AND ")
+        );
 
-        // Build query with dynamic parameters
-        let mut query_builder = sqlx::QueryBuilder::new(query_str);
-        query_builder.push_bind(course_id.to_string());
+        // Execute query based on the number of parameters
+        let records = match params.len() {
+            1 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .fetch_all(&self.pool)
+                .await?,
+            2 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .bind(&params[1])
+                .fetch_all(&self.pool)
+                .await?,
+            3 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                .bind(&params[0])
+                .bind(&params[1])
+                .bind(&params[2])
+                .fetch_all(&self.pool)
+                .await?,
+            _ => vec![],
+        };
 
-        if let Some(start) = start_date {
-            query_builder.push_bind(start.to_rfc3339());
-        }
-
-        if let Some(end) = end_date {
-            query_builder.push_bind(end.to_rfc3339());
-        }
-
-        // Execute query
-        let records = sqlx::query_as::<_, AttendanceRecord>(query_builder.sql())
-            .fetch_all(&self.pool)
-            .await?
+        // Convert to Attendance objects
+        let result = records
             .into_iter()
-            .map(|record| Attendance {
-                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
-                course_id: Uuid::parse_str(&record.course_id).unwrap_or_else(|_| Uuid::nil()),
-                student_name: record.student_name,
-                student_id: record.student_id,
-                timestamp: record.timestamp.parse().unwrap_or_else(|_| Utc::now()),
-                confirmation_code: record.confirmation_code,
-                ip_address: record.ip_address,
-            })
+            .map(Attendance::from)
             .collect();
 
-        Ok(records)
+        Ok(result)
     }
-
     /// Get attendance statistics for a course
     pub async fn get_attendance_stats(&self, course_id: Uuid) -> Result<AttendanceStats> {
         // Total attendance count
@@ -144,7 +143,7 @@ impl AttendanceRepository {
                 .await?;
 
         // Today's attendance count
-        let today = Utc::now().date().and_hms(0, 0, 0);
+        let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
         let tomorrow = today + chrono::Duration::days(1);
 
         let today_count: (i64,) = sqlx::query_as(
@@ -152,8 +151,8 @@ impl AttendanceRepository {
              WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
         .bind(course_id.to_string())
-        .bind(today.to_rfc3339())
-        .bind(tomorrow.to_rfc3339())
+        .bind(today.to_string())
+        .bind(tomorrow.to_string())
         .fetch_one(&self.pool)
         .await?;
 

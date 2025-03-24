@@ -2,7 +2,7 @@ use crate::models::attendance::{Attendance, AttendanceStats, AttendanceSubmissio
 use crate::services::confirmation::ConfirmationCodeService;
 use crate::utils::error::Error;
 use actix_web::{HttpRequest, HttpResponse, get, post, web};
-use chrono::{DateTime, Datelike, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -327,8 +327,7 @@ async fn get_attendance_records(
                     timestamp: DateTime::from(
                         chrono::DateTime::parse_from_rfc3339(&timestamp).unwrap_or_else(|_| {
                             // Create a UTC timestamp at Unix epoch (1970-01-01)
-                            let naive = DateTime::from_timestamp(0, 0).unwrap().date_naive();
-                            DateTime::from_naive_utc_and_offset(NaiveDateTime::from(naive), Utc)
+                            DateTime::from(chrono::DateTime::from_timestamp(0, 0).unwrap_or_else(|| Utc::now()))
                         }),
                     ),
                     confirmation_code,

@@ -25,7 +25,7 @@ pub async fn init_db_pool(database_url: &str) -> Result<Pool<Sqlite>> {
 
 /// Check database health
 pub async fn check_db_health(pool: &Pool<Sqlite>) -> Result<bool> {
-    let result = sqlx::query("SELECT 1").fetch_one(pool).await?;
+    let _result = sqlx::query("SELECT 1").fetch_one(pool).await?;
 
     Ok(true)
 }

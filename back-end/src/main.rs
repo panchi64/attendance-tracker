@@ -1,10 +1,8 @@
 use actix_cors::Cors;
-use actix_files;
 use actix_web::{App, HttpServer, middleware::Logger, web};
 use dotenv::dotenv;
 use local_ip_address::local_ip;
 use log::{error, info};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::signal;
 
@@ -89,7 +87,7 @@ async fn main() -> std::io::Result<()> {
     let attendance_service = AttendanceService::new(
         db_pool.clone(),
         confirmation_service.clone(),
-        realtime_service.clone(),
+        (*realtime_service).clone(),  // Dereference the Arc to get the inner RealtimeService
     );
 
     // Export service
@@ -232,8 +230,7 @@ async fn main() -> std::io::Result<()> {
         };
 
         // Create WebSocket session
-        let ws_session =
-            services::realtime::WebSocketSession::new(course_id, realtime_service.clone());
+        let ws_session = services::realtime::WebSocketSession::new(course_id, realtime_service.get_ref().clone());
 
         // Start WebSocket connection
         actix_web_actors::ws::start(ws_session, &req, stream)

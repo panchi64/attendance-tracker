@@ -1,4 +1,4 @@
-use crate::models::course::{Course, CourseCreation, CoursePartial, CourseRecord};
+use crate::models::course::{Course, CourseCreation, CoursePartial};
 use crate::utils::error::Error;
 use actix_web::{HttpResponse, delete, get, post, put, web};
 use chrono::Utc;
@@ -200,9 +200,9 @@ pub async fn delete_course(
 #[post("/courses/switch")]
 pub async fn switch_course(
     data: web::Json<serde_json::Value>,
-    db: web::Data<Pool<Sqlite>>,
+    _db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
-    let course_name = data
+    let _course_name = data
         .get("courseName")
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::validation("Course name is required"))?;

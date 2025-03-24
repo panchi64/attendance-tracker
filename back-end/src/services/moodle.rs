@@ -36,7 +36,7 @@ impl MoodleService {
     }
 
     /// Export attendance data to Moodle
-    pub async fn export_attendance(&self, course_id: Uuid, moodle_course_id: i64) -> Result<bool> {
+    pub async fn export_attendance(&self, course_id: Uuid, _moodle_course_id: i64) -> Result<bool> {
         if !self.is_configured() {
             return Err(anyhow::anyhow!("Moodle integration not configured"));
         }
