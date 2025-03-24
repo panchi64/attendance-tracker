@@ -297,7 +297,7 @@ export default function Dashboard() {
               <div className="text-center text-7xl font-bold text-gray-900 mt-2">{confirmationCode}</div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
                 <div
-                  className="bg-blue-400 h-2 rounded-full"
+                  className="bg-blue-400 h-2 rounded-full transition-all duration-75 ease-linear"
                   style={{ width: `${codeProgress}%` }}
                 ></div>
               </div>
