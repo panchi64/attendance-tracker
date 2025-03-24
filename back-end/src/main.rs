@@ -1,6 +1,5 @@
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware::Logger, web};
-use actix_web_actors::ws;
 use dotenv::dotenv;
 use local_ip_address::local_ip;
 use log::{error, info};
@@ -139,13 +138,13 @@ async fn main() -> std::io::Result<()> {
     // Start HTTP server
     let server = HttpServer::new(move || {
         // Set up CORS for local development
+        let local_ip_str = local_ip.to_string();
         let cors = Cors::default()
-            .allowed_origin_fn(|origin, _req_head| {
-                // Allow localhost and local IP addresses
+            .allowed_origin_fn(move |origin, _req_head| {
                 let origin_str = origin.to_str().unwrap_or("");
                 origin_str.starts_with("http://localhost:")
-                    || origin_str.starts_with(&format!("http://{}:", local_ip))
-                    || origin_str.starts_with(&"http://127.0.0.1:".to_string())
+                    || origin_str.contains(&format!("http://{}:", local_ip_str))
+                    || origin_str.starts_with("http://127.0.0.1:")
             })
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec!["Authorization", "Content-Type"])

@@ -2,6 +2,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use actix_web_actors::ws;
+use futures::AsyncWriteExt;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -14,24 +16,74 @@ use uuid::Uuid;
 pub struct WebSocketMessage(pub String);
 
 // Simple session representation
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WebSocketSession {
     course_id: Uuid,
     client_id: String,
+    realtime_service: Arc<RealtimeService>,
 }
 
 impl WebSocketSession {
     pub fn new(course_id: Uuid, realtime_service: Arc<RealtimeService>) -> Self {
         let client_id = Uuid::new_v4().to_string();
-        let session = Self {
+        Self {
             course_id,
             client_id,
-        };
+            realtime_service,
+        }
+    }
+}
 
-        // In real implementation with actix, we'd register the client here
-        let _ = realtime_service.clone();
+impl Actor for WebSocketSession {
+    type Context = ws::WebsocketContext<Self>;
 
-        session
+    fn started(&mut self, ctx: &mut Self::Context) {
+        // Register the client when the WebSocket connects
+        let client_id = self.client_id.clone();
+        let course_id = self.course_id;
+        let realtime_service = self.realtime_service.clone();
+
+        // Use Actix's arbiter to run the async task
+        actix::spawn(async move {
+            if let Err(e) = realtime_service.register(course_id, client_id).await {
+                eprintln!("Failed to register client: {}", e);
+            }
+        });
+    }
+
+    fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
+        // Unregister client when the WebSocket disconnects
+        let client_id = self.client_id.clone();
+        let course_id = self.course_id;
+        let realtime_service = self.realtime_service.clone();
+
+        actix::spawn(async move {
+            if let Err(e) = realtime_service.unregister(course_id, &client_id).await {
+                eprintln!("Failed to unregister client: {}", e);
+            }
+        });
+
+        actix::Running::Stop
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketSession {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => {
+                // Handle text messages - you can add custom logic here
+                println!("Received message: {}", text);
+
+                // Echo back the message (or implement your custom logic)
+                ctx.text(text);
+            },
+            Ok(ws::Message::Close(_reason)) => {
+                // Handle WebSocket close
+                let _ = ctx.close();
+            }
+            _ => (), // Ignore other message types
+        }
     }
 }
 

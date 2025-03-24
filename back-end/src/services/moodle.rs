@@ -74,7 +74,7 @@ impl MoodleService {
     /// Synchronize student roster from Moodle
     pub async fn sync_student_roster(
         &self,
-        moodle_course_id: i64,
+        _moodle_course_id: i64,
     ) -> Result<Vec<(String, String)>> {
         if !self.is_configured() {
             return Err(anyhow::anyhow!("Moodle integration not configured"));
