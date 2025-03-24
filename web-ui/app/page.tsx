@@ -295,9 +295,9 @@ export default function Dashboard() {
             <div className="w-full mt-6">
               <div className="text-center text-xl text-gray-700 font-medium">Confirmation Code</div>
               <div className="text-center text-7xl font-bold text-gray-900 mt-2">{confirmationCode}</div>
-              <div className="w-full bg-gray-100 rounded-full h-2 mt-4">
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
                 <div
-                  className="bg-gray-300 h-2 rounded-full"
+                  className="bg-blue-400 h-2 rounded-full"
                   style={{ width: `${codeProgress}%` }}
                 ></div>
               </div>
