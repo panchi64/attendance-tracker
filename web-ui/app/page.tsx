@@ -47,12 +47,12 @@ export default function Dashboard() {
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
 
   // Refs for click outside handlers
-  const sectionDropdownRef = useRef(null);
-  const courseNameInputRef = useRef(null);
-  const professorNameInputRef = useRef(null);
-  const officeHoursInputRef = useRef(null);
-  const totalStudentsInputRef = useRef(null);
-  const courseDropdownRef = useRef(null);
+  const sectionDropdownRef = useRef<HTMLDivElement | null>(null);
+  const courseDropdownRef = useRef<HTMLDivElement | null>(null);
+  const courseNameInputRef = useRef<HTMLInputElement | null>(null);
+  const professorNameInputRef = useRef<HTMLInputElement | null>(null);
+  const officeHoursInputRef = useRef<HTMLInputElement | null>(null);
+  const totalStudentsInputRef = useRef<HTMLInputElement | null>(null);
 
   // Mock QR code - in real implementation this would be generated
   const qrCodeUrl = "/qrcode-placeholder.png";
@@ -137,18 +137,20 @@ export default function Dashboard() {
 
   // Handle clicks outside dropdowns
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (sectionDropdownRef.current && !sectionDropdownRef.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent): void {
+      const target = event.target as Node;
+
+      if (sectionDropdownRef.current && !sectionDropdownRef.current.contains(target)) {
         setShowSectionDropdown(false);
       }
-      if (courseDropdownRef.current && !courseDropdownRef.current.contains(event.target)) {
+      if (courseDropdownRef.current && !courseDropdownRef.current.contains(target)) {
         setShowCourseDropdown(false);
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside as EventListener);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside as EventListener);
     };
   }, []);
 
@@ -186,7 +188,8 @@ export default function Dashboard() {
         setAvailableCourses(getAvailableCourses());
         alert(`Course "${courseName}" has been saved.`);
       } catch (error) {
-        alert(`Error: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        alert(`Error: ${errorMessage}`);
       }
     } else {
       // Just save the current preferences
