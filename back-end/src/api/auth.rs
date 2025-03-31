@@ -42,7 +42,7 @@ pub async fn login(
 ) -> Result<HttpResponse, Error> {
     let user_data = login_data.into_inner();
 
-    // Find user by username
+    // Find user by username - using query! instead of query_as! to avoid type conversion issues
     let user_result = sqlx::query!(
         "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
         user_data.username
@@ -52,33 +52,21 @@ pub async fn login(
 
     let user = match user_result {
         Some(record) => {
-            // Fixed UUID parsing by getting the string from Option first
-            let id_str = record.id.as_deref().unwrap_or("");
-            let user_id = match Uuid::parse_str(id_str) {
+            let user_id = match Uuid::parse_str(&record.id) {
                 Ok(id) => id,
-                Err(_) => {
-                    return Ok(HttpResponse::InternalServerError().json(LoginResponse {
-                        success: false,
-                        message: "Error processing user data".to_string(),
-                        token: None,
-                    }));
-                }
+                Err(_) => return Err(Error::validation("Invalid user ID format")),
             };
 
-            // Fixed DateTime parsing by converting to string first
-            let created_at_str = match &record.created_at {
-                Some(dt) => dt,
-                None => "",
-            };
-            let created_at = match chrono::DateTime::parse_from_rfc3339(created_at_str) {
+            // Parse the DateTime properly from the string
+            let created_at = match chrono::DateTime::parse_from_rfc3339(&record.created_at) {
                 Ok(dt) => dt.with_timezone(&Utc),
-                Err(_) => Utc::now(),
+                Err(_) => Utc::now(), // Fallback value in case of parsing error
             };
 
             User {
                 id: user_id,
-                username: record.username.unwrap_or_default(),
-                password_hash: record.password_hash.unwrap_or_default(),
+                username: record.username,
+                password_hash: record.password_hash.clone(),
                 created_at,
             }
         }
