@@ -46,6 +46,11 @@ next-env.d.ts
 # Build files
 target/
 
+# Database files
+attendance.db
+.sqlx/
+
+
 
 # --- GENERAL ---
 .idea/

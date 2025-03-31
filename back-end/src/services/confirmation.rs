@@ -62,7 +62,7 @@ impl ConfirmationCodeService {
         .await?;
 
         if let Some(record) = result {
-            let expires_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&record.expires_at)
+            let expires_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&record.expires_at.to_string())
                 .map_err(|e| anyhow::anyhow!("Failed to parse expires_at: {}", e))?
                 .with_timezone(&Utc);
 

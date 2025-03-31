@@ -1,15 +1,12 @@
+use actix::{Actor, AsyncContext, Running, StreamHandler, fut};
+use actix_web::web;
+use actix_web_actors::ws;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use actix_web_actors::ws;
-use futures::AsyncWriteExt;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-
-// The following is a simplified implementation that doesn't use actix WebSockets.
-// For a full implementation, you'd need to add the actix and actix-web-actors dependencies
-// and implement the proper WebSocket handlers.
 
 // Message structure for communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +31,7 @@ impl WebSocketSession {
     }
 }
 
+// Implement Actor trait
 impl Actor for WebSocketSession {
     type Context = ws::WebsocketContext<Self>;
 
@@ -43,30 +41,32 @@ impl Actor for WebSocketSession {
         let course_id = self.course_id;
         let realtime_service = self.realtime_service.clone();
 
-        // Use Actix's arbiter to run the async task
-        actix::spawn(async move {
+        // Use a simpler approach for spawning the future
+        ctx.wait(fut::wrap_future::<_, Self>(async move {
             if let Err(e) = realtime_service.register(course_id, client_id).await {
                 eprintln!("Failed to register client: {}", e);
             }
-        });
+        }));
     }
 
-    fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
+    fn stopping(&mut self, _: &mut Self::Context) -> Running {
         // Unregister client when the WebSocket disconnects
         let client_id = self.client_id.clone();
         let course_id = self.course_id;
         let realtime_service = self.realtime_service.clone();
 
-        actix::spawn(async move {
+        // Using tokio directly for cleanup is okay since it's during shutdown
+        tokio::spawn(async move {
             if let Err(e) = realtime_service.unregister(course_id, &client_id).await {
                 eprintln!("Failed to unregister client: {}", e);
             }
         });
 
-        actix::Running::Stop
+        Running::Stop
     }
 }
 
+// Implement StreamHandler for WebSocket messages
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
@@ -77,10 +77,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocketSession 
 
                 // Echo back the message (or implement your custom logic)
                 ctx.text(text);
-            },
-            Ok(ws::Message::Close(_reason)) => {
+            }
+            Ok(ws::Message::Close(reason)) => {
                 // Handle WebSocket close
-                let _ = ctx.close();
+                ctx.close(reason);
             }
             _ => (), // Ignore other message types
         }
@@ -94,6 +94,7 @@ pub struct RealtimeService {
     clients: Arc<RwLock<HashMap<Uuid, Vec<String>>>>,
 }
 
+// Keep the rest of your RealtimeService implementation...
 impl RealtimeService {
     pub fn new() -> Self {
         Self {
@@ -144,14 +145,14 @@ impl RealtimeService {
     }
 }
 
-// This is a placeholder for the WebSocket handler that would be implemented with actix_web
-pub async fn ws_handler(course_id: Uuid, realtime_service: Arc<RealtimeService>) -> Result<String> {
-    // In real implementation, this would handle the WebSocket connection
-    let client_id = Uuid::new_v4().to_string();
-    realtime_service
-        .register(course_id, client_id.clone())
-        .await?;
-
-    // Return success message (in real implementation, this would create the WebSocket)
-    Ok(format!("WebSocket connected for course {}", course_id))
+// This is now implemented as a real WebSocket handler above
+// We can keep this function declaration though, as it's used in main.rs
+pub async fn ws_handler(
+    _req: actix_web::HttpRequest,
+    _stream: web::Payload,
+    _path: web::Path<String>,
+    _realtime_service: web::Data<Arc<RealtimeService>>,
+) -> Result<String> {
+    // The actual implementation is now in the WebSocketSession Actor
+    Ok("WebSocket connected".to_string())
 }

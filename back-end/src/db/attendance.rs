@@ -1,7 +1,7 @@
 use crate::models::attendance::{
     Attendance, AttendanceRecord, AttendanceStats, AttendanceSubmission,
 };
-use anyhow::{Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Sqlite, query};
 use uuid::Uuid;
@@ -100,29 +100,32 @@ impl AttendanceRepository {
 
         // Execute query based on the number of parameters
         let records = match params.len() {
-            1 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .fetch_all(&self.pool)
-                .await?,
-            2 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .bind(&params[1])
-                .fetch_all(&self.pool)
-                .await?,
-            3 => sqlx::query_as::<_, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .bind(&params[1])
-                .bind(&params[2])
-                .fetch_all(&self.pool)
-                .await?,
+            1 => {
+                sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            2 => {
+                sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .bind(&params[1])
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            3 => {
+                sqlx::query_as::<_, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .bind(&params[1])
+                    .bind(&params[2])
+                    .fetch_all(&self.pool)
+                    .await?
+            }
             _ => vec![],
         };
 
         // Convert to Attendance objects
-        let result = records
-            .into_iter()
-            .map(Attendance::from)
-            .collect();
+        let result = records.into_iter().map(Attendance::from).collect();
 
         Ok(result)
     }
@@ -200,6 +203,6 @@ impl AttendanceRepository {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected())
+        Ok(result.rows_affected() as i64)
     }
 }

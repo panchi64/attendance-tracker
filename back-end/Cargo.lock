@@ -8,7 +8,9 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de7fa236829ba0841304542f7614c42b80fca007455315c45c785ccfa873a85b"
 dependencies = [
+ "actix-macros",
  "actix-rt",
+ "actix_derive",
  "bitflags 2.9.0",
  "bytes",
  "crossbeam-channel",
@@ -303,6 +305,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix_derive"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6ac1e58cded18cb28ddc17143c4dea5345b3ad575e14f32f66e4054a56eb271"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -495,6 +508,7 @@ dependencies = [
 name = "back-end"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "actix-cors",
  "actix-files",
  "actix-multipart",

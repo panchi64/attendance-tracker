@@ -85,21 +85,27 @@ impl ExportService {
 
         // Execute query based on the number of parameters
         let records = match params.len() {
-            1 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .fetch_all(&self.db)
-                .await?,
-            2 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .bind(&params[1])
-                .fetch_all(&self.db)
-                .await?,
-            3 => sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
-                .bind(&params[0])
-                .bind(&params[1])
-                .bind(&params[2])
-                .fetch_all(&self.db)
-                .await?,
+            1 => {
+                sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .fetch_all(&self.db)
+                    .await?
+            }
+            2 => {
+                sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .bind(&params[1])
+                    .fetch_all(&self.db)
+                    .await?
+            }
+            3 => {
+                sqlx::query_as::<Sqlite, AttendanceRecord>(&query_str)
+                    .bind(&params[0])
+                    .bind(&params[1])
+                    .bind(&params[2])
+                    .fetch_all(&self.db)
+                    .await?
+            }
             _ => vec![],
         };
 

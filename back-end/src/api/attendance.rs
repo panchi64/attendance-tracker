@@ -38,15 +38,18 @@ pub async fn submit_attendance(
     let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
     let tomorrow = today + chrono::Duration::days(1);
 
+    let course_id_str = attendance_data.course_id.to_string();
+    let today_str = today.to_string();
+    let tomorrow_str = tomorrow.to_string();
+
     let existing = sqlx::query!(
-        "SELECT id FROM attendance
-         WHERE course_id = ? AND student_id = ? AND timestamp >= ? AND timestamp < ?",
-        attendance_data.course_id.to_string(),
-        attendance_data.student_id,
-        today.to_string(),
-        tomorrow.to_string()
-    )
-    .fetch_optional(&**db)
+    "SELECT id FROM attendance WHERE course_id = ? AND student_id = ? AND timestamp >= ? AND timestamp < ?",
+    course_id_str,
+    attendance_data.student_id,
+    today_str,
+    tomorrow_str
+)
+        .fetch_optional(&**db)
     .await?;
 
     if existing.is_some() {
@@ -164,7 +167,7 @@ pub async fn get_attendance_stats(
     .fetch_all(&**db)
     .await?
     .into_iter()
-    .map(|row| (row.date, row.count as i64))
+    .map(|row| (row.date.unwrap_or_default(), row.count as i64))
     .collect();
 
     let stats = AttendanceStats {
@@ -268,21 +271,60 @@ async fn get_attendance_records(
 
     // Execute query based on params length
     let records = match params.len() {
-        1 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+        1 => {
+            sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                ),
+            >(&query_str)
             .bind(&params[0])
             .fetch_all(db)
-            .await?,
-        2 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+            .await?
+        }
+        2 => {
+            sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                ),
+            >(&query_str)
             .bind(&params[0])
             .bind(&params[1])
             .fetch_all(db)
-            .await?,
-        3 => sqlx::query_as::<_, (String, String, String, String, String, String, Option<String>)>(&query_str)
+            .await?
+        }
+        3 => {
+            sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                ),
+            >(&query_str)
             .bind(&params[0])
             .bind(&params[1])
             .bind(&params[2])
             .fetch_all(db)
-            .await?,
+            .await?
+        }
         _ => vec![],
     };
 
@@ -291,14 +333,14 @@ async fn get_attendance_records(
         .into_iter()
         .map(
             |(
-                 id,
-                 course_id,
-                 student_name,
-                 student_id,
-                 timestamp,
-                 confirmation_code,
-                 ip_address,
-             )| {
+                id,
+                course_id,
+                student_name,
+                student_id,
+                timestamp,
+                confirmation_code,
+                ip_address,
+            )| {
                 Attendance {
                     id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::nil()),
                     course_id: Uuid::parse_str(&course_id).unwrap_or_else(|_| Uuid::nil()),
@@ -307,7 +349,10 @@ async fn get_attendance_records(
                     timestamp: DateTime::from(
                         chrono::DateTime::parse_from_rfc3339(&timestamp).unwrap_or_else(|_| {
                             // Create a UTC timestamp at Unix epoch (1970-01-01)
-                            DateTime::from(chrono::DateTime::from_timestamp(0, 0).unwrap_or_else(|| Utc::now()))
+                            DateTime::from(
+                                chrono::DateTime::from_timestamp(0, 0)
+                                    .unwrap_or_else(|| Utc::now()),
+                            )
                         }),
                     ),
                     confirmation_code,

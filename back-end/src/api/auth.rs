@@ -1,10 +1,11 @@
+use crate::models::user::User;
 use crate::utils::error::Error;
 use actix_web::{
     HttpResponse,
     cookie::{Cookie, SameSite},
     post, web,
 };
-use bcrypt::{verify};
+use bcrypt::verify;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};

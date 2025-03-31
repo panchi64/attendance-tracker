@@ -1,3 +1,4 @@
+use crate::models::course::CourseRecord;
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use crate::utils::error::Error;
 use actix_web::{HttpResponse, delete, get, post, put, web};

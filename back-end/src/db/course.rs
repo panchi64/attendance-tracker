@@ -1,5 +1,6 @@
+use crate::models::course::CourseRecord;
 use crate::models::course::{Course, CourseCreation, CoursePartial};
-use anyhow::{Result};
+use anyhow::Result;
 use chrono::Utc;
 use serde_json;
 use sqlx::{Pool, Sqlite, query, query_as};
