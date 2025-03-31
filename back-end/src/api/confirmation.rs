@@ -16,11 +16,13 @@ pub async fn get_current_code(
     let course_id = Uuid::parse_str(&path.into_inner()).map_err(|e| Error::UuidError(e))?;
 
     // Get the latest confirmation code for this course
+    // Line 23
+    let course_id_str = course_id.to_string();
     let code = sqlx::query!(
         "SELECT code, expires_at FROM confirmation_codes
-         WHERE course_id = ?
-         ORDER BY created_at DESC LIMIT 1",
-        course_id.to_string()
+     WHERE course_id = ?
+     ORDER BY created_at DESC LIMIT 1",
+        course_id_str
     )
     .fetch_optional(&**db)
     .await?;

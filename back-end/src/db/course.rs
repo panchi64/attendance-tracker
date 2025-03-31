@@ -1,6 +1,6 @@
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json;
 use sqlx::{Pool, Sqlite, query};
 use uuid::Uuid;
@@ -31,14 +31,17 @@ impl CourseRepository {
                     serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
 
                 Course {
-                    id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                    id: match &record.id {
+                        Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
+                        None => Uuid::nil(),
+                    },
                     name: record.name,
                     section_number: record.section_number,
                     sections,
                     professor_name: record.professor_name,
                     office_hours: record.office_hours,
                     news: record.news,
-                    total_students: record.total_students,
+                    total_students: record.total_students as i32,
                     logo_path: record.logo_path,
                     created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
                     updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
@@ -63,16 +66,24 @@ impl CourseRepository {
                     serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
 
                 Some(Course {
-                    id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                    id: match &record.id {
+                        Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
+                        None => Uuid::nil(),
+                    },
                     name: record.name,
                     section_number: record.section_number,
                     sections,
                     professor_name: record.professor_name,
                     office_hours: record.office_hours,
                     news: record.news,
-                    total_students: record.total_students,
+                    total_students: record.total_students as i32,
                     logo_path: record.logo_path,
-                    created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
+                    created_at: match &record.created_at {
+                        Some(dt_str) => DateTime::parse_from_rfc3339(dt_str)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(|_| Utc::now()),
+                        None => Utc::now(),
+                    },
                     updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
                 })
             }

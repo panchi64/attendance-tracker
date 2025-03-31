@@ -20,7 +20,10 @@ pub async fn list_courses(db: web::Data<Pool<Sqlite>>) -> Result<HttpResponse, E
             let sections: Vec<String> =
                 serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
             Course {
-                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                id: match &record.id {
+                    Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
+                    None => Uuid::nil(),
+                },
                 name: record.name,
                 section_number: record.section_number,
                 sections,
@@ -110,7 +113,10 @@ pub async fn get_course(
             let sections: Vec<String> =
                 serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
             let course = Course {
-                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                id: match &record.id {
+                    Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
+                    None => Uuid::nil(),
+                },
                 name: record.name,
                 section_number: record.section_number,
                 sections,

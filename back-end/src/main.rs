@@ -135,12 +135,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(attendance_service_data.clone())
             .app_data(storage_service_data.clone())
             .app_data(config_data.clone())
-            // API routes
             .service(
                 web::scope("/api")
-                    // Authentication
-                    .service(api::auth::login)
-                    .service(api::auth::logout)
                     // Preferences
                     .service(api::preferences::get_preferences)
                     .service(api::preferences::update_preferences)
@@ -148,21 +144,13 @@ async fn main() -> std::io::Result<()> {
                     .service(api::courses::list_courses)
                     .service(api::courses::get_course)
                     .service(api::courses::switch_course)
-                    // Course management - protected routes
-                    .service(
-                        web::scope("/admin")
-                            .service(api::courses::create_course)
-                            .service(api::courses::update_course)
-                            .service(api::courses::delete_course),
-                    )
-                    // Attendance - rate limited
-                    .service(
-                        web::scope("/attendance")
-                            .service(api::attendance::submit_attendance)
-                            .service(api::attendance::get_course_attendance)
-                            .service(api::attendance::get_attendance_stats)
-                            .service(api::attendance::export_attendance_csv),
-                    )
+                    .service(api::courses::create_course)
+                    .service(api::courses::update_course)
+                    .service(api::courses::delete_course)
+                    // Attendance
+                    .service(api::attendance::submit_attendance)
+                    .service(api::attendance::get_course_attendance)
+                    .service(api::attendance::get_attendance_stats)
                     // Confirmation codes
                     .service(api::confirmation::get_current_code)
                     .service(api::confirmation::generate_new_code)
