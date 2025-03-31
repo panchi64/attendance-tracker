@@ -62,15 +62,18 @@ pub async fn submit_attendance(
     // Record attendance
     let id = Uuid::new_v4();
     let now = Utc::now();
+    let id_str = id.to_string();
+    let course_id_str = attendance_data.course_id.to_string();
+    let now_str = now.to_rfc3339();
 
     sqlx::query!(
         "INSERT INTO attendance (id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
-        id.to_string(),
-        attendance_data.course_id.to_string(),
+        id_str,
+        course_id_str,
         attendance_data.student_name,
         attendance_data.student_id,
-        now.to_rfc3339(),
+        now_str,
         attendance_data.confirmation_code,
         ip
     )
@@ -153,7 +156,8 @@ pub async fn get_attendance_stats(
     .await?;
 
     // Get attendance by date
-    let attendance_by_date = sqlx::query!(
+    let course_id_str = course_id.to_string();
+    let attendance_by_date_raw = sqlx::query!(
         "SELECT
             strftime('%Y-%m-%d', timestamp) as date,
             COUNT(DISTINCT student_id) as count
@@ -162,13 +166,16 @@ pub async fn get_attendance_stats(
          GROUP BY strftime('%Y-%m-%d', timestamp)
          ORDER BY date DESC
          LIMIT 30",
-        course_id.to_string()
+        course_id_str
     )
     .fetch_all(&**db)
-    .await?
-    .into_iter()
-    .map(|row| (row.date.unwrap_or_default(), row.count as i64))
-    .collect();
+    .await?;
+
+    // Convert Option<String> to String with a default value if None
+    let attendance_by_date = attendance_by_date_raw
+        .into_iter()
+        .map(|row| (row.date.unwrap_or_default(), row.count as i64))
+        .collect();
 
     let stats = AttendanceStats {
         total_records: total_count.0,

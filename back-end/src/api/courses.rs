@@ -1,4 +1,3 @@
-use crate::models::course::CourseRecord;
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use crate::utils::error::Error;
 use actix_web::{HttpResponse, delete, get, post, put, web};
@@ -9,11 +8,31 @@ use uuid::Uuid;
 
 #[get("/courses")]
 pub async fn list_courses(db: web::Data<Pool<Sqlite>>) -> Result<HttpResponse, Error> {
-    let courses = sqlx::query_as!(CourseRecord, "SELECT * FROM courses ORDER BY name")
+    // Using query instead of query_as due to type conversion issues
+    let courses_records = sqlx::query!("SELECT * FROM courses ORDER BY name")
         .fetch_all(&**db)
-        .await?
+        .await?;
+
+    // Manually convert records to Course type
+    let courses = courses_records
         .into_iter()
-        .map(Course::from)
+        .map(|record| {
+            let sections: Vec<String> =
+                serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
+            Course {
+                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                name: record.name,
+                section_number: record.section_number,
+                sections,
+                professor_name: record.professor_name,
+                office_hours: record.office_hours,
+                news: record.news,
+                total_students: record.total_students,
+                logo_path: record.logo_path,
+                created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+            }
+        })
         .collect::<Vec<_>>();
 
     Ok(HttpResponse::Ok().json(courses))
@@ -31,12 +50,17 @@ pub async fn create_course(
     // Convert sections to JSON
     let sections_json = serde_json::to_string(&course_data.sections)?;
 
+    // Create string versions of variables to avoid temporary value drops
+    let id_str = id.to_string();
+    let now_str1 = now.to_rfc3339();
+    let now_str2 = now.to_rfc3339();
+
     sqlx::query!(
         "INSERT INTO courses
             (id, name, section_number, sections, professor_name,
             office_hours, news, total_students, logo_path, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        id.to_string(),
+        id_str,
         course_data.name,
         course_data.section_number,
         sections_json,
@@ -45,8 +69,8 @@ pub async fn create_course(
         course_data.news,
         course_data.total_students,
         course_data.logo_path,
-        now.to_rfc3339(),
-        now.to_rfc3339()
+        now_str1,
+        now_str2
     )
     .execute(&**db)
     .await?;
@@ -74,18 +98,32 @@ pub async fn get_course(
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
     let id = Uuid::parse_str(&path.into_inner())?;
+    let id_str = id.to_string();
 
-    let course = sqlx::query_as!(
-        CourseRecord,
-        "SELECT * FROM courses WHERE id = ?",
-        id.to_string()
-    )
-    .fetch_optional(&**db)
-    .await?
-    .map(Course::from);
+    // Use query instead of query_as and convert manually
+    let course_record = sqlx::query!("SELECT * FROM courses WHERE id = ?", id_str)
+        .fetch_optional(&**db)
+        .await?;
 
-    match course {
-        Some(course) => Ok(HttpResponse::Ok().json(course)),
+    match course_record {
+        Some(record) => {
+            let sections: Vec<String> =
+                serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
+            let course = Course {
+                id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
+                name: record.name,
+                section_number: record.section_number,
+                sections,
+                professor_name: record.professor_name,
+                office_hours: record.office_hours,
+                news: record.news,
+                total_students: record.total_students,
+                logo_path: record.logo_path,
+                created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+            };
+            Ok(HttpResponse::Ok().json(course))
+        }
         None => Ok(HttpResponse::NotFound().json(json!({
             "error": "Course not found"
         }))),
@@ -99,16 +137,13 @@ pub async fn update_course(
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
     let id = Uuid::parse_str(&path.into_inner())?;
+    let id_str = id.to_string();
     let course_data = course.into_inner();
 
     // Get existing course
-    let existing = sqlx::query_as!(
-        CourseRecord,
-        "SELECT * FROM courses WHERE id = ?",
-        id.to_string()
-    )
-    .fetch_optional(&**db)
-    .await?;
+    let existing = sqlx::query!("SELECT * FROM courses WHERE id = ?", id_str)
+        .fetch_optional(&**db)
+        .await?;
 
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(json!({
@@ -142,6 +177,10 @@ pub async fn update_course(
         .unwrap_or(existing.total_students);
     let logo_path = course_data.logo_path.unwrap_or(existing.logo_path);
 
+    // Store temporary values
+    let now_str = now.to_rfc3339();
+    let id_str = id.to_string();
+
     let result = sqlx::query!(
         "UPDATE courses
          SET name = ?, section_number = ?, sections = ?, professor_name = ?,
@@ -155,8 +194,8 @@ pub async fn update_course(
         news,
         total_students,
         logo_path,
-        now.to_rfc3339(),
-        id.to_string()
+        now_str,
+        id_str
     )
     .execute(&**db)
     .await?;
@@ -174,9 +213,10 @@ pub async fn delete_course(
     db: web::Data<Pool<Sqlite>>,
 ) -> Result<HttpResponse, Error> {
     let id = Uuid::parse_str(&path.into_inner())?;
+    let id_str = id.to_string();
 
     // Check if course exists
-    let existing = sqlx::query!("SELECT id FROM courses WHERE id = ?", id.to_string())
+    let existing = sqlx::query!("SELECT id FROM courses WHERE id = ?", id_str)
         .fetch_optional(&**db)
         .await?;
 
@@ -187,7 +227,7 @@ pub async fn delete_course(
     }
 
     // Delete course
-    let result = sqlx::query!("DELETE FROM courses WHERE id = ?", id.to_string())
+    let result = sqlx::query!("DELETE FROM courses WHERE id = ?", id_str)
         .execute(&**db)
         .await?;
 
