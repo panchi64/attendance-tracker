@@ -1,6 +1,5 @@
 "use client";
 
-// pages/index.js
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -55,7 +54,7 @@ export default function Dashboard() {
   const totalStudentsInputRef = useRef<HTMLInputElement | null>(null);
 
   // Mock QR code - in real implementation this would be generated
-  const qrCodeUrl = "/qrcode-placeholder.png";
+  const qrCodeUrl = `/api/qrcode/${preferences?.courseName || 'default'}?t=${Date.now()}`;
 
   // Load preferences on initial render
   useEffect(() => {
@@ -99,7 +98,7 @@ export default function Dashboard() {
       saveCoursePreferences(updatedPreferences);
       setPreferences(updatedPreferences);
     }
-  }, [courseName, sectionNumber, sections, professorName, officeHours, news, totalStudents, logoPath]);
+  }, [preferences, courseName, sectionNumber, sections, professorName, officeHours, news, totalStudents, logoPath]);
 
   // Handle confirmation code timer
   useEffect(() => {
@@ -418,6 +417,7 @@ export default function Dashboard() {
                 alt="QR Code"
                 layout="fill"
                 className="object-contain"
+                key={preferences?.courseName}
               />
             </div>
 

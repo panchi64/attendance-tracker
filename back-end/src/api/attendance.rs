@@ -4,7 +4,7 @@ use crate::utils::error::Error;
 use actix_web::{HttpRequest, HttpResponse, get, post, web};
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 use uuid::Uuid;
 
 #[post("/attendance")]
@@ -157,24 +157,28 @@ pub async fn get_attendance_stats(
 
     // Get attendance by date
     let course_id_str = course_id.to_string();
-    let attendance_by_date_raw = sqlx::query!(
+    let attendance_by_date_raw = sqlx::query(
         "SELECT
-            strftime('%Y-%m-%d', timestamp) as date,
-            COUNT(DISTINCT student_id) as count
-         FROM attendance
-         WHERE course_id = ?
-         GROUP BY strftime('%Y-%m-%d', timestamp)
-         ORDER BY date DESC
-         LIMIT 30",
-        course_id_str
+        strftime('%Y-%m-%d', timestamp) as date,
+        COUNT(DISTINCT student_id) as count
+     FROM attendance
+     WHERE course_id = ?
+     GROUP BY strftime('%Y-%m-%d', timestamp)
+     ORDER BY date DESC
+     LIMIT 30"
     )
-    .fetch_all(&**db)
-    .await?;
+        .bind(course_id_str)
+        .fetch_all(&**db)  // Note the &**db instead of &self.pool
+        .await?;
 
     // Convert Option<String> to String with a default value if None
     let attendance_by_date = attendance_by_date_raw
         .into_iter()
-        .map(|row| (row.date.unwrap_or_default(), row.count as i64))
+        .map(|row| {
+            let date: Option<String> = row.try_get("date").unwrap_or(None);
+            let count: i64 = row.try_get("count").unwrap_or(0);
+            (date.unwrap_or_default(), count)
+        })
         .collect();
 
     let stats = AttendanceStats {

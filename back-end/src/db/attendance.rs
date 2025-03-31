@@ -3,7 +3,7 @@ use crate::models::attendance::{
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::{Pool, Sqlite, query};
+use sqlx::{Pool, Sqlite, query, Row};
 use uuid::Uuid;
 
 /// Repository for attendance operations
@@ -166,24 +166,28 @@ impl AttendanceRepository {
 
         // Attendance by date - fixed by handling Option<String>
         let course_id_str = course_id.to_string();
-        let attendance_by_date_raw = sqlx::query!(
+        let attendance_by_date_raw = sqlx::query(
             "SELECT
-                strftime('%Y-%m-%d', timestamp) as date,
-                COUNT(DISTINCT student_id) as count
-             FROM attendance
-             WHERE course_id = ?
-             GROUP BY strftime('%Y-%m-%d', timestamp)
-             ORDER BY date DESC
-             LIMIT 30",
-            course_id_str
+        strftime('%Y-%m-%d', timestamp) as date,
+        COUNT(DISTINCT student_id) as count
+     FROM attendance
+     WHERE course_id = ?
+     GROUP BY strftime('%Y-%m-%d', timestamp)
+     ORDER BY date DESC
+     LIMIT 30"
         )
-        .fetch_all(&self.pool)
-        .await?;
+            .bind(course_id_str)
+            .fetch_all(&self.pool)
+            .await?;
 
         // Handle Option<String> in the result
         let attendance_by_date = attendance_by_date_raw
             .into_iter()
-            .map(|row| (row.date.unwrap_or_default(), row.count as i64))
+            .map(|row| {
+                let date: Option<String> = row.try_get("date").unwrap_or(None);
+                let count: i64 = row.try_get("count").unwrap_or(0);
+                (date.unwrap_or_default(), count)
+            })
             .collect();
 
         Ok(AttendanceStats {
