@@ -34,13 +34,14 @@ impl StatisticsService {
         }
 
         // Query attendance by student
+        let course_id_str = course_id.to_string();
         let records = sqlx::query!(
             "SELECT student_id, student_name, COUNT(DISTINCT date(timestamp)) as days_present
              FROM attendance
              WHERE course_id = ?
              GROUP BY student_id
              ORDER BY student_name",
-            course_id.to_string()
+            course_id_str
         )
         .fetch_all(&self.pool)
         .await?;
@@ -60,10 +61,11 @@ impl StatisticsService {
 
     /// Count the number of distinct class days for a course
     pub async fn count_class_days(&self, course_id: Uuid) -> Result<i64> {
+        let course_id_str = course_id.to_string();
         let count: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT date(timestamp)) FROM attendance WHERE course_id = ?",
         )
-        .bind(course_id.to_string())
+        .bind(course_id_str)
         .fetch_one(&self.pool)
         .await?;
 
@@ -77,6 +79,8 @@ impl StatisticsService {
         days: i64,
     ) -> Result<Vec<(String, i64)>> {
         let start_date = Utc::now() - Duration::days(days);
+        let course_id_str = course_id.to_string();
+        let start_date_str = start_date.to_rfc3339();
 
         let records = sqlx::query!(
             "SELECT
@@ -86,15 +90,16 @@ impl StatisticsService {
              WHERE course_id = ? AND timestamp >= ?
              GROUP BY strftime('%Y-%m-%d', timestamp)
              ORDER BY date",
-            course_id.to_string(),
-            start_date.to_rfc3339()
+            course_id_str,
+            start_date_str
         )
         .fetch_all(&self.pool)
         .await?;
 
+        // Handle Option<String> properly
         let trend = records
             .into_iter()
-            .map(|row| (row.date, row.count as i64))
+            .map(|row| (row.date.unwrap_or_default(), row.count as i64))
             .collect();
 
         Ok(trend)

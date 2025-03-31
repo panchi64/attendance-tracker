@@ -1,6 +1,7 @@
 use crate::services::confirmation::ConfirmationCodeService;
 use crate::utils::error::Error;
 use actix_web::{HttpResponse, get, post, web};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -26,9 +27,11 @@ pub async fn get_current_code(
 
     if let Some(code_record) = code {
         // Check if code is still valid
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&code_record.expires_at)
+        // First convert the expires_at string to a DateTime
+        let expires_at_str = code_record.expires_at.to_string();
+        let expires_at = DateTime::parse_from_rfc3339(&expires_at_str)
             .map_err(|e| Error::ChronoError(e))?
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&Utc);
 
         let now = chrono::Utc::now();
         let is_valid = now < expires_at;

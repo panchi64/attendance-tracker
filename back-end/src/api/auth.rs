@@ -10,6 +10,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -41,9 +42,8 @@ pub async fn login(
 ) -> Result<HttpResponse, Error> {
     let user_data = login_data.into_inner();
 
-    // Find user by username
-    let user_result = sqlx::query_as!(
-        User,
+    // Find user by username - using query! instead of query_as! to avoid type conversion issues
+    let user_result = sqlx::query!(
         "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
         user_data.username
     )
@@ -51,7 +51,25 @@ pub async fn login(
     .await?;
 
     let user = match user_result {
-        Some(user) => user,
+        Some(record) => {
+            let user_id = match Uuid::parse_str(&record.id) {
+                Ok(id) => id,
+                Err(_) => return Err(Error::validation("Invalid user ID format")),
+            };
+
+            // Parse the DateTime properly from the string
+            let created_at = match chrono::DateTime::parse_from_rfc3339(&record.created_at) {
+                Ok(dt) => dt.with_timezone(&Utc),
+                Err(_) => Utc::now(), // Fallback value in case of parsing error
+            };
+
+            User {
+                id: user_id,
+                username: record.username,
+                password_hash: record.password_hash.clone(),
+                created_at,
+            }
+        }
         None => {
             return Ok(HttpResponse::Unauthorized().json(LoginResponse {
                 success: false,
