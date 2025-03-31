@@ -10,21 +10,15 @@ use tokio::signal;
 mod api;
 mod config;
 mod db;
-mod middleware;
 mod models;
 mod services;
 mod utils;
 
 use config::Config;
-use middleware::{
-    auth::AuthMiddleware,
-    rate_limit::{RateLimiter, RateLimiterConfig},
-};
 use services::{
-    attendance::AttendanceService, auth::AuthService, confirmation::ConfirmationCodeService,
-    course::CourseService, export::ExportService, moodle::MoodleService,
+    attendance::AttendanceService, confirmation::ConfirmationCodeService, course::CourseService,
     preference::PreferenceService, qrcode::QrCodeService, realtime::RealtimeService,
-    statistics::StatisticsService, storage::StorageService,
+    storage::StorageService,
 };
 
 #[actix_web::main]
@@ -62,9 +56,6 @@ async fn main() -> std::io::Result<()> {
     // Create shared services
     info!("Initializing services");
 
-    // Auth service
-    let auth_service = AuthService::new(db_pool.clone(), config.clone());
-
     // QR code service
     let qrcode_service = QrCodeService::new();
 
@@ -90,22 +81,6 @@ async fn main() -> std::io::Result<()> {
         (*realtime_service).clone(), // Dereference the Arc to get the inner RealtimeService
     );
 
-    // Export service
-    let export_service = ExportService::new(db_pool.clone());
-
-    // Statistics service
-    let statistics_service = StatisticsService::new(db_pool.clone());
-
-    // Moodle service
-    let moodle_service = MoodleService::new(db_pool.clone());
-
-    // Create middleware
-    let auth_middleware = AuthMiddleware::new(auth_service.clone());
-    let rate_limiter = RateLimiter::new(RateLimiterConfig {
-        requests_per_minute: 60,
-        burst_size: 10,
-    });
-
     // Open browser with application URL if configured
     if config.auto_open_browser {
         info!("Auto-opening browser at {}", server_url);
@@ -118,17 +93,13 @@ async fn main() -> std::io::Result<()> {
     let db_data = web::Data::new(db_pool.clone());
 
     // Service data for dependency injection
-    let auth_service_data = web::Data::new(auth_service);
     let qrcode_service_data = web::Data::new(qrcode_service);
     let confirmation_service_data = web::Data::new(confirmation_service);
     let realtime_service_data = web::Data::new(realtime_service.clone());
     let preference_service_data = web::Data::new(preference_service);
     let course_service_data = web::Data::new(course_service);
     let attendance_service_data = web::Data::new(attendance_service);
-    let export_service_data = web::Data::new(export_service);
-    let statistics_service_data = web::Data::new(statistics_service);
     let storage_service_data = web::Data::new(storage_service);
-    let moodle_service_data = web::Data::new(moodle_service);
 
     // Configuration for app
     let config_data = web::Data::new(config.clone());
@@ -156,17 +127,13 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             // App state and services
             .app_data(db_data.clone())
-            .app_data(auth_service_data.clone())
             .app_data(qrcode_service_data.clone())
             .app_data(confirmation_service_data.clone())
             .app_data(realtime_service_data.clone())
             .app_data(preference_service_data.clone())
             .app_data(course_service_data.clone())
             .app_data(attendance_service_data.clone())
-            .app_data(export_service_data.clone())
-            .app_data(statistics_service_data.clone())
             .app_data(storage_service_data.clone())
-            .app_data(moodle_service_data.clone())
             .app_data(config_data.clone())
             // API routes
             .service(
@@ -184,7 +151,6 @@ async fn main() -> std::io::Result<()> {
                     // Course management - protected routes
                     .service(
                         web::scope("/admin")
-                            .wrap(auth_middleware.clone())
                             .service(api::courses::create_course)
                             .service(api::courses::update_course)
                             .service(api::courses::delete_course),
@@ -192,7 +158,6 @@ async fn main() -> std::io::Result<()> {
                     // Attendance - rate limited
                     .service(
                         web::scope("/attendance")
-                            .wrap(rate_limiter.clone())
                             .service(api::attendance::submit_attendance)
                             .service(api::attendance::get_course_attendance)
                             .service(api::attendance::get_attendance_stats)
