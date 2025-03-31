@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
     let realtime_service = RealtimeService::new().into_arc();
 
     // Storage service for uploads
-    let storage_service = StorageService::new("public/uploads", "/uploads");
+    let storage_service = StorageService::new("./public/uploads", "/uploads");
 
     // Preference service
     let preference_service = PreferenceService::new(db_pool.clone());
@@ -164,7 +164,7 @@ async fn main() -> std::io::Result<()> {
             // Serve uploaded files
             .service(actix_files::Files::new("/uploads", "public/uploads"))
             // Serve static files from the web-ui build directory
-            .service(actix_files::Files::new("/", "web-ui/out").index_file("index.html"))
+            .service(actix_files::Files::new("/", "./web-ui/out").index_file("index.html"))
     })
     .bind((config.host.as_str(), config.port))?
     .run();
