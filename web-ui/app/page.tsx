@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
@@ -15,6 +15,22 @@ import {
   createNewCourse,
   CoursePreferences
 } from './services/preferencesService';
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 export default function Dashboard() {
   // Load preferences on initial render
@@ -53,8 +69,26 @@ export default function Dashboard() {
   const officeHoursInputRef = useRef<HTMLInputElement | null>(null);
   const totalStudentsInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Mock QR code - in real implementation this would be generated
   const qrCodeUrl = `/api/qrcode/${preferences?.courseName || 'default'}`;
+  const debouncedCourseName = useDebounce(courseName, 500);
+
+  function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, waitFor: number) {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    return (...args: Parameters<F>): void => {
+      if (timeout !== null) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(() => func(...args), waitFor);
+    };
+  }
+
+  const debouncedSave = useCallback((courseData: CoursePreferences) => {
+    const save = debounce((data: CoursePreferences) => {
+      saveCoursePreferences(data);
+    }, 1000);
+    save(courseData);
+  }, []);
 
   // Load preferences on initial render
   useEffect(() => {
@@ -86,34 +120,105 @@ export default function Dashboard() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (!preferences) return;
+
+    const updatedPreferences: CoursePreferences = {
+      courseName,
+      sectionNumber,
+      sections,
+      professorName,
+      officeHours,
+      news,
+      totalStudents,
+      logoPath
+    };
+
+    debouncedSave(updatedPreferences);
+  }, [
+    debouncedCourseName,
+    sectionNumber,
+    sections,
+    professorName,
+    officeHours,
+    news,
+    totalStudents,
+    logoPath,
+    preferences,
+    debouncedSave,
+    courseName
+  ]);
+
   // WebSocket connection for real-time updates
   useEffect(() => {
     if (!preferences) return;
 
-    const courseId = preferences.courseName || 'default';
-    const ws = new WebSocket(`ws://${window.location.host}/api/ws/${courseId}`);
+    let wsConnection: WebSocket | null = null;
+    let isMounted = true;
 
-    ws.onopen = () => {
-      console.log('WebSocket connection established');
-    };
+    const connectWebSocket = async () => {
+      try {
+        // First get the course by name to get its ID
+        const response = await fetch(`/api/courses?name=${encodeURIComponent(preferences.courseName)}`);
+        if (!response.ok || !isMounted) return;
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+        const courses = await response.json();
+        if (!courses || courses.length === 0 || !isMounted) return;
 
-      if (data.type === 'attendance_update') {
-        setPresentCount(data.presentCount);
+        // Get the course ID (UUID)
+        const courseId = courses[0].id;
+        if (!courseId || !isMounted) return;
+
+        // Close existing connection if any
+        if (wsConnection) {
+          wsConnection.close();
+        }
+
+        // Create new WebSocket connection with UUID
+        wsConnection = new WebSocket(`ws://${window.location.host}/api/ws/${courseId}`);
+
+        wsConnection.onopen = () => {
+          if (isMounted) {
+            console.log('WebSocket connection ready');
+          }
+        };
+
+        wsConnection.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'attendance_update') {
+              setPresentCount(data.presentCount);
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        wsConnection.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+
+        wsConnection.onclose = () => {
+          if (isMounted) {
+            console.log('WebSocket connection closed');
+          }
+        };
+      } catch (error) {
+        console.error('Error establishing WebSocket connection:', error);
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
+    connectWebSocket();
 
+    // Cleanup function
     return () => {
-      // Close WebSocket connection when component unmounts
-      ws.close();
+      isMounted = false;
+      if (wsConnection) {
+        wsConnection.close();
+      }
     };
-  }, [preferences]);
+  }, [preferences, preferences?.courseName]); // Only reconnect when course name changes
 
   // Save preferences when relevant state changes
   useEffect(() => {
