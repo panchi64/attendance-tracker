@@ -43,24 +43,39 @@ export default function AttendanceForm() {
             return;
         }
 
-        // Mock API call - this would be replaced with actual API call
-        try {
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        // Get course ID from query parameters or use default
+        const urlParams = new URLSearchParams(window.location.search);
+        const courseId = urlParams.get('course') || 'default';
 
-            // For demo purposes, let's simulate different error scenarios based on the confirmation code
-            if (confirmationCode === '000000') {
-                throw new Error('API_ERROR');
-            } else if (confirmationCode === '999999') {
-                throw new Error('CODE_EXPIRED');
-            } else if (confirmationCode === '111111') {
-                throw new Error('INVALID_CODE');
+        try {
+            // Make actual API call to backend
+            const response = await fetch('/api/attendance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    course_id: courseId,
+                    student_name: studentName,
+                    student_id: studentId,
+                    confirmation_code: confirmationCode
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Handle different error types based on response
+                if (data.message.includes('expired')) {
+                    throw new Error('CODE_EXPIRED');
+                } else if (data.message.includes('invalid')) {
+                    throw new Error('INVALID_CODE');
+                } else {
+                    throw new Error('API_ERROR');
+                }
             }
 
-            // In the real implementation, this would call the backend API
-            console.log('Submitting attendance:', { studentName, studentId, confirmationCode });
-
-            // Simulate successful submission
+            // Success case
             setSubmitted(true);
             setError('');
         } catch (err: unknown) {

@@ -54,30 +54,66 @@ export default function Dashboard() {
   const totalStudentsInputRef = useRef<HTMLInputElement | null>(null);
 
   // Mock QR code - in real implementation this would be generated
-  const qrCodeUrl = `/api/qrcode/${preferences?.courseName || 'default'}?t=${Date.now()}`;
+  const qrCodeUrl = `/api/qrcode/${preferences?.courseName || 'default'}`;
 
   // Load preferences on initial render
   useEffect(() => {
-    try {
-      const currentPrefs = loadCurrentCoursePreferences();
-      setPreferences(currentPrefs);
+    const loadData = async () => {
+      try {
+        // Load course preferences (now async)
+        const currentPrefs = await loadCurrentCoursePreferences();
+        setPreferences(currentPrefs);
 
-      // Update state from preferences
-      setCourseName(currentPrefs.courseName);
-      setSectionNumber(currentPrefs.sectionNumber);
-      setSections(currentPrefs.sections);
-      setProfessorName(currentPrefs.professorName);
-      setOfficeHours(currentPrefs.officeHours);
-      setNews(currentPrefs.news);
-      setTotalStudents(currentPrefs.totalStudents);
-      setLogoPath(currentPrefs.logoPath);
+        // Update state from preferences
+        setCourseName(currentPrefs.courseName);
+        setSectionNumber(currentPrefs.sectionNumber);
+        setSections(currentPrefs.sections);
+        setProfessorName(currentPrefs.professorName);
+        setOfficeHours(currentPrefs.officeHours);
+        setNews(currentPrefs.news);
+        setTotalStudents(currentPrefs.totalStudents);
+        setLogoPath(currentPrefs.logoPath);
 
-      // Load available courses
-      setAvailableCourses(getAvailableCourses());
-    } catch (error) {
-      console.error('Error loading preferences:', error);
-    }
+        // Load available courses (now async)
+        const courses = await getAvailableCourses();
+        setAvailableCourses(courses);
+      } catch (error) {
+        console.error('Error loading preferences:', error instanceof Error ? error.message : String(error));
+      }
+    };
+
+    // Call the async function
+    loadData();
   }, []);
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!preferences) return;
+
+    const courseId = preferences.courseName || 'default';
+    const ws = new WebSocket(`ws://${window.location.host}/api/ws/${courseId}`);
+
+    ws.onopen = () => {
+      console.log('WebSocket connection established');
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'attendance_update') {
+        setPresentCount(data.presentCount);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    return () => {
+      // Close WebSocket connection when component unmounts
+      ws.close();
+    };
+  }, [preferences]);
 
   // Save preferences when relevant state changes
   useEffect(() => {
@@ -169,11 +205,12 @@ export default function Dashboard() {
   };
 
   // Save current course
-  const handleSaveCourse = () => {
+  const handleSaveCourse = async () => {
     // If the name has been customized, save as a new course
     if (preferences && courseName !== preferences.courseName) {
       try {
-        const newPrefs = createNewCourse(courseName, {
+        // createNewCourse is now async
+        const newPrefs = await createNewCourse(courseName, {
           sectionNumber,
           sections,
           professorName,
@@ -184,50 +221,65 @@ export default function Dashboard() {
         });
 
         setPreferences(newPrefs);
-        setAvailableCourses(getAvailableCourses());
+
+        // getAvailableCourses is now async
+        const courses = await getAvailableCourses();
+        setAvailableCourses(courses);
+
         alert(`Course "${courseName}" has been saved.`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         alert(`Error: ${errorMessage}`);
       }
     } else {
-      // Just save the current preferences
-      const updatedPreferences: CoursePreferences = {
-        courseName,
-        sectionNumber,
-        sections,
-        professorName,
-        officeHours,
-        news,
-        totalStudents,
-        logoPath
-      };
+      try {
+        // Just save the current preferences
+        const updatedPreferences: CoursePreferences = {
+          courseName,
+          sectionNumber,
+          sections,
+          professorName,
+          officeHours,
+          news,
+          totalStudents,
+          logoPath
+        };
 
-      saveCoursePreferences(updatedPreferences);
-      alert(`Course "${courseName}" has been updated.`);
+        // saveCoursePreferences is now async
+        await saveCoursePreferences(updatedPreferences);
+        alert(`Course "${courseName}" has been updated.`);
+      } catch (error) {
+        console.error('Error saving course:', error instanceof Error ? error.message : String(error));
+        alert('Failed to update course. Please try again.');
+      }
     }
   };
 
   // Switch to a different course
-  const handleSwitchCourse = (selectedCourse: string) => {
-    const coursePrefs = switchCourse(selectedCourse);
+  const handleSwitchCourse = async (selectedCourse: string) => {
+    try {
+      const coursePrefs = await switchCourse(selectedCourse);
 
-    if (coursePrefs) {
-      setPreferences(coursePrefs);
+      if (coursePrefs) {
+        setPreferences(coursePrefs);
 
-      // Update all state variables
-      setCourseName(coursePrefs.courseName);
-      setSectionNumber(coursePrefs.sectionNumber);
-      setSections(coursePrefs.sections);
-      setProfessorName(coursePrefs.professorName);
-      setOfficeHours(coursePrefs.officeHours);
-      setNews(coursePrefs.news);
-      setTotalStudents(coursePrefs.totalStudents);
-      setLogoPath(coursePrefs.logoPath);
+        // Update all state variables
+        setCourseName(coursePrefs.courseName);
+        setSectionNumber(coursePrefs.sectionNumber);
+        setSections(coursePrefs.sections);
+        setProfessorName(coursePrefs.professorName);
+        setOfficeHours(coursePrefs.officeHours);
+        setNews(coursePrefs.news);
+        setTotalStudents(coursePrefs.totalStudents);
+        setLogoPath(coursePrefs.logoPath);
 
-      // Reset UI states
-      setPresentCount(0);
-      setShowCourseDropdown(false);
+        // Reset UI states
+        setPresentCount(0);
+        setShowCourseDropdown(false);
+      }
+    } catch (error) {
+      console.error('Error switching course:', error instanceof Error ? error.message : String(error));
+      alert('Failed to switch course. Please try again.');
     }
   };
 
@@ -417,7 +469,6 @@ export default function Dashboard() {
                 alt="QR Code"
                 layout="fill"
                 className="object-contain"
-                key={preferences?.courseName}
               />
             </div>
 
