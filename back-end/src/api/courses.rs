@@ -30,10 +30,16 @@ pub async fn list_courses(db: web::Data<Pool<Sqlite>>) -> Result<HttpResponse, E
                 professor_name: record.professor_name,
                 office_hours: record.office_hours,
                 news: record.news,
-                total_students: record.total_students,
+                total_students: record.total_students as i32,
                 logo_path: record.logo_path,
-                created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                    record.created_at,
+                    Utc,
+                ),
+                updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                    record.created_at,
+                    Utc,
+                ),
             }
         })
         .collect::<Vec<_>>();
@@ -123,10 +129,16 @@ pub async fn get_course(
                 professor_name: record.professor_name,
                 office_hours: record.office_hours,
                 news: record.news,
-                total_students: record.total_students,
+                total_students: record.total_students as i32,
                 logo_path: record.logo_path,
-                created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                    record.created_at,
+                    Utc,
+                ),
+                updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                    record.created_at,
+                    Utc,
+                ),
             };
             Ok(HttpResponse::Ok().json(course))
         }

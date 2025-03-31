@@ -1,6 +1,6 @@
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json;
 use sqlx::{Pool, Sqlite, query};
 use uuid::Uuid;
@@ -43,8 +43,14 @@ impl CourseRepository {
                     news: record.news,
                     total_students: record.total_students as i32,
                     logo_path: record.logo_path,
-                    created_at: record.created_at.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+                    created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                        record.created_at,
+                        Utc,
+                    ),
+                    updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                        record.created_at,
+                        Utc,
+                    ),
                 }
             })
             .collect();
@@ -78,13 +84,14 @@ impl CourseRepository {
                     news: record.news,
                     total_students: record.total_students as i32,
                     logo_path: record.logo_path,
-                    created_at: match &record.created_at {
-                        Some(dt_str) => DateTime::parse_from_rfc3339(dt_str)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
-                        None => Utc::now(),
-                    },
-                    updated_at: record.updated_at.parse().unwrap_or_else(|_| Utc::now()),
+                    created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                        record.created_at,
+                        Utc,
+                    ),
+                    updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
+                        record.created_at,
+                        Utc,
+                    ),
                 })
             }
             None => None,
