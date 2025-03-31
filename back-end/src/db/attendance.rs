@@ -25,15 +25,20 @@ impl AttendanceRepository {
         let id = Uuid::new_v4();
         let now = Utc::now();
 
+        // Create string versions to prevent temporary value drops
+        let id_str = id.to_string();
+        let course_id_str = submission.course_id.to_string();
+        let now_str = now.to_rfc3339();
+
         // Insert attendance record
         query!(
             "INSERT INTO attendance (id, course_id, student_name, student_id, timestamp, confirmation_code, ip_address)
              VALUES (?, ?, ?, ?, ?, ?, ?)",
-            id.to_string(),
-            submission.course_id.to_string(),
+            id_str,
+            course_id_str,
             submission.student_name,
             submission.student_id,
-            now.to_rfc3339(),
+            now_str,
             submission.confirmation_code,
             ip_address
         )
@@ -159,8 +164,9 @@ impl AttendanceRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        // Attendance by date
-        let attendance_by_date = sqlx::query!(
+        // Attendance by date - fixed by handling Option<String>
+        let course_id_str = course_id.to_string();
+        let attendance_by_date_raw = sqlx::query!(
             "SELECT
                 strftime('%Y-%m-%d', timestamp) as date,
                 COUNT(DISTINCT student_id) as count
@@ -169,13 +175,16 @@ impl AttendanceRepository {
              GROUP BY strftime('%Y-%m-%d', timestamp)
              ORDER BY date DESC
              LIMIT 30",
-            course_id.to_string()
+            course_id_str
         )
         .fetch_all(&self.pool)
-        .await?
-        .into_iter()
-        .map(|row| (row.date, row.count as i64))
-        .collect();
+        .await?;
+
+        // Handle Option<String> in the result
+        let attendance_by_date = attendance_by_date_raw
+            .into_iter()
+            .map(|row| (row.date.unwrap_or_default(), row.count as i64))
+            .collect();
 
         Ok(AttendanceStats {
             total_records: total_count.0,
@@ -187,7 +196,8 @@ impl AttendanceRepository {
 
     /// Delete attendance record
     pub async fn delete_attendance(&self, id: Uuid) -> Result<bool> {
-        let result = query!("DELETE FROM attendance WHERE id = ?", id.to_string())
+        let id_str = id.to_string();
+        let result = query!("DELETE FROM attendance WHERE id = ?", id_str)
             .execute(&self.pool)
             .await?;
 
@@ -196,12 +206,10 @@ impl AttendanceRepository {
 
     /// Delete all attendance records for a course
     pub async fn delete_course_attendance(&self, course_id: Uuid) -> Result<i64> {
-        let result = query!(
-            "DELETE FROM attendance WHERE course_id = ?",
-            course_id.to_string()
-        )
-        .execute(&self.pool)
-        .await?;
+        let course_id_str = course_id.to_string();
+        let result = query!("DELETE FROM attendance WHERE course_id = ?", course_id_str)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() as i64)
     }

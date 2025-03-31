@@ -1,4 +1,3 @@
-use crate::models::course::CourseRecord;
 use crate::models::course::{Course, CourseCreation, CoursePartial};
 use anyhow::Result;
 use chrono::Utc;
@@ -18,9 +17,13 @@ impl CourseRepository {
 
     /// List all courses
     pub async fn list_courses(&self) -> Result<Vec<Course>> {
-        let courses = query_as!(CourseRecord, "SELECT * FROM courses ORDER BY name")
+        // Use query! instead of query_as! to avoid type conversion issues
+        let course_records = query!("SELECT * FROM courses ORDER BY name")
             .fetch_all(&self.pool)
-            .await?
+            .await?;
+
+        // Manually build Course objects from the raw records
+        let courses = course_records
             .into_iter()
             .map(|record| {
                 // Parse sections JSON array
@@ -48,13 +51,10 @@ impl CourseRepository {
 
     /// Get course by ID
     pub async fn get_course(&self, id: Uuid) -> Result<Option<Course>> {
-        let record = query_as!(
-            CourseRecord,
-            "SELECT * FROM courses WHERE id = ?",
-            id.to_string()
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let id_str = id.to_string();
+        let record = query!("SELECT * FROM courses WHERE id = ?", id_str)
+            .fetch_optional(&self.pool)
+            .await?;
 
         let course = match record {
             Some(record) => {
@@ -90,12 +90,17 @@ impl CourseRepository {
         // Convert sections to JSON
         let sections_json = serde_json::to_string(&course.sections)?;
 
+        // Create string versions of temporary values
+        let id_str = id.to_string();
+        let now_rfc1 = now.to_rfc3339();
+        let now_rfc2 = now.to_rfc3339();
+
         query!(
             "INSERT INTO courses
                 (id, name, section_number, sections, professor_name,
                 office_hours, news, total_students, logo_path, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            id.to_string(),
+            id_str,
             course.name,
             course.section_number,
             sections_json,
@@ -104,8 +109,8 @@ impl CourseRepository {
             course.news,
             course.total_students,
             course.logo_path,
-            now.to_rfc3339(),
-            now.to_rfc3339()
+            now_rfc1,
+            now_rfc2
         )
         .execute(&self.pool)
         .await?;
@@ -151,6 +156,10 @@ impl CourseRepository {
         // Convert sections to JSON
         let sections_json = serde_json::to_string(&sections)?;
 
+        // Create strings for temp values
+        let now_str = now.to_rfc3339();
+        let id_str = id.to_string();
+
         let result = query!(
             "UPDATE courses
              SET name = ?, section_number = ?, sections = ?, professor_name = ?,
@@ -164,8 +173,8 @@ impl CourseRepository {
             news,
             total_students,
             logo_path,
-            now.to_rfc3339(),
-            id.to_string()
+            now_str,
+            id_str
         )
         .execute(&self.pool)
         .await?;
@@ -176,9 +185,10 @@ impl CourseRepository {
     /// Delete a course
     pub async fn delete_course(&self, id: Uuid) -> Result<bool> {
         // First check if there are any attendance records for this course
+        let id_str = id.to_string();
         let attendance_count: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM attendance WHERE course_id = ?")
-                .bind(id.to_string())
+                .bind(&id_str)
                 .fetch_one(&self.pool)
                 .await?;
 
@@ -189,7 +199,7 @@ impl CourseRepository {
         }
 
         // Delete course
-        let result = query!("DELETE FROM courses WHERE id = ?", id.to_string())
+        let result = query!("DELETE FROM courses WHERE id = ?", id_str)
             .execute(&self.pool)
             .await?;
 
@@ -201,13 +211,17 @@ impl CourseRepository {
         let today = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
         let tomorrow = today + chrono::Duration::days(1);
 
+        let course_id_str = course_id.to_string();
+        let today_str = today.to_string();
+        let tomorrow_str = tomorrow.to_string();
+
         let count: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT student_id) FROM attendance
              WHERE course_id = ? AND timestamp >= ? AND timestamp < ?",
         )
-        .bind(course_id.to_string())
-        .bind(today.to_string())
-        .bind(tomorrow.to_string())
+        .bind(course_id_str)
+        .bind(today_str)
+        .bind(tomorrow_str)
         .fetch_one(&self.pool)
         .await?;
 

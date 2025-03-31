@@ -37,13 +37,17 @@ impl AuthService {
         let id = Uuid::new_v4();
         let now = Utc::now();
 
+        // Store temp variables to avoid drops
+        let id_str = id.to_string();
+        let now_str = now.to_rfc3339();
+
         // Insert user
         sqlx::query!(
             "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
-            id.to_string(),
+            id_str,
             username,
             password_hash,
-            now.to_rfc3339()
+            now_str
         )
         .execute(&self.pool)
         .await?;
@@ -62,7 +66,7 @@ impl AuthService {
         username: &str,
         password: &str,
     ) -> Result<Option<(User, String)>> {
-        // Find user by username
+        // Find user by username - fixed query to avoid query_as! conversion issues
         let user_result = sqlx::query!(
             "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
             username
@@ -72,12 +76,16 @@ impl AuthService {
 
         match user_result {
             Some(record) => {
-                // Parse user data
+                // Parse user data, handle Option<String> properly
+                let id_str = record.id.unwrap_or_default();
                 let user = User {
-                    id: Uuid::parse_str(&record.id)?,
+                    id: Uuid::parse_str(&id_str)?,
                     username: record.username,
                     password_hash: record.password_hash.clone(),
-                    created_at: record.created_at.parse()?,
+                    // Parse the string to DateTime
+                    created_at: DateTime::parse_from_rfc3339(&record.created_at)
+                        .unwrap_or_default()
+                        .with_timezone(&Utc),
                 };
 
                 // Verify password
@@ -137,12 +145,10 @@ impl AuthService {
         new_password: &str,
     ) -> Result<bool> {
         // Get user
-        let user_result = sqlx::query!(
-            "SELECT password_hash FROM users WHERE id = ?",
-            user_id.to_string()
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let user_id_str = user_id.to_string();
+        let user_result = sqlx::query!("SELECT password_hash FROM users WHERE id = ?", user_id_str)
+            .fetch_optional(&self.pool)
+            .await?;
 
         match user_result {
             Some(record) => {
@@ -156,12 +162,13 @@ impl AuthService {
 
                 // Hash new password
                 let new_password_hash = hash(new_password, DEFAULT_COST)?;
+                let user_id_str = user_id.to_string();
 
                 // Update password
                 sqlx::query!(
                     "UPDATE users SET password_hash = ? WHERE id = ?",
                     new_password_hash,
-                    user_id.to_string()
+                    user_id_str
                 )
                 .execute(&self.pool)
                 .await?;
@@ -170,5 +177,19 @@ impl AuthService {
             }
             None => Ok(false),
         }
+    }
+}
+
+// Add a helper to make the compiler happy with DateTime parsing
+use chrono::DateTime;
+
+trait DateTimeExt {
+    fn parse_from_rfc3339(s: &str) -> Result<DateTime<Utc>, chrono::ParseError>;
+}
+
+impl DateTimeExt for DateTime<Utc> {
+    fn parse_from_rfc3339(s: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
+        let dt = chrono::DateTime::parse_from_rfc3339(s)?;
+        Ok(dt.with_timezone(&Utc))
     }
 }
