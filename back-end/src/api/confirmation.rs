@@ -1,7 +1,6 @@
 use crate::services::confirmation::ConfirmationCodeService;
 use crate::utils::error::Error;
 use actix_web::{HttpResponse, get, post, web};
-use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -16,22 +15,22 @@ pub async fn get_current_code(
     let course_id = Uuid::parse_str(&path.into_inner()).map_err(|e| Error::UuidError(e))?;
 
     // Get the latest confirmation code for this course
+    // Fix: Store the string in a variable to extend its lifetime
+    let course_id_str = course_id.to_string();
     let code = sqlx::query!(
         "SELECT code, expires_at FROM confirmation_codes
          WHERE course_id = ?
          ORDER BY created_at DESC LIMIT 1",
-        course_id.to_string()
+        course_id_str
     )
     .fetch_optional(&**db)
     .await?;
 
     if let Some(code_record) = code {
         // Check if code is still valid
-        // First convert the expires_at string to a DateTime
-        let expires_at_str = code_record.expires_at.to_string();
-        let expires_at = DateTime::parse_from_rfc3339(&expires_at_str)
+        let expires_at = chrono::DateTime::parse_from_rfc3339(&code_record.expires_at)
             .map_err(|e| Error::ChronoError(e))?
-            .with_timezone(&Utc);
+            .with_timezone(&chrono::Utc);
 
         let now = chrono::Utc::now();
         let is_valid = now < expires_at;
