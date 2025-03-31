@@ -62,8 +62,10 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
         let unique_name = format!("university-logo-{}.{}", Uuid::new_v4(), file_ext);
         let file_path = upload_path.join(&unique_name);
 
-        // Use move to capture the file_path by value
+        // Clone file_path for the closure
         let file_path_for_closure = file_path.clone();
+
+        // Create the file
         let mut file = web::block(move || std::fs::File::create(&file_path_for_closure))
             .await?
             .map_err(actix_web::error::ErrorInternalServerError)?;
@@ -79,7 +81,9 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
             // Check size limit
             if file_size > MAX_FILE_SIZE {
                 // Delete partially written file
-                let _ = std::fs::remove_file(&file_path);
+                let file_path_clone = file_path.clone();
+                // Use clone to avoid lifetime issues
+                let _ = std::fs::remove_file(&file_path_clone);
 
                 return Ok(HttpResponse::BadRequest().json(json!({
                     "success": false,
@@ -87,15 +91,18 @@ pub async fn upload_logo(mut payload: Multipart) -> Result<HttpResponse, Error> 
                 })));
             }
 
-            // Write chunk to file - use move to capture file by value
+            // Write chunk to file - use clone to avoid lifetime issues
             let data_clone = data.clone();
+
+            // Update file with new chunk
             file = web::block(move || file.write_all(&data_clone).map(|_| file))
                 .await?
                 .map_err(actix_web::error::ErrorInternalServerError)?;
         }
 
         // Set public URL path
-        logo_path = Some(format!("/{}/{}", UPLOAD_DIR, unique_name));
+        let path_str = format!("/{}/{}", UPLOAD_DIR, unique_name);
+        logo_path = Some(path_str);
     }
 
     match logo_path {

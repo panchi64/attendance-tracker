@@ -16,6 +16,7 @@ pub async fn generate_qr_code(
     let local_ip =
         local_ip().unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
 
+    // Build the URL with the local IP and course ID
     let attendance_url = format!(
         "http://{}:{}/attendance?course={}",
         local_ip, config.port, course_id

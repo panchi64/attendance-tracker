@@ -24,7 +24,8 @@ impl PreferencesRepository {
         match result {
             Some(record) => {
                 // Parse the JSON data
-                let preferences = serde_json::from_str::<Preferences>(&record.data)
+                let data_str = record.data.to_string();
+                let preferences = serde_json::from_str::<Preferences>(&data_str)
                     .context("Failed to parse preferences JSON")?;
                 Ok(preferences)
             }
