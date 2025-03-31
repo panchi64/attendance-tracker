@@ -2,6 +2,7 @@ use actix_web::{
     Error,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
     error::ErrorTooManyRequests,
+    http::header,
 };
 use futures::future::{LocalBoxFuture, Ready, ready};
 use std::collections::HashMap;
@@ -154,14 +155,16 @@ where
         };
 
         // Proceed with the request or return 429 Too Many Requests
-        if can_proceed {
-            let fut = self.service.call(req);
-            Box::pin(async move {
+        let service = self.service.clone(); // Clone to avoid lifetime issues
+
+        Box::pin(async move {
+            if can_proceed {
+                let fut = service.call(req);
                 let res = fut.await?;
                 Ok(res)
-            })
-        } else {
-            Box::pin(async { Err(ErrorTooManyRequests("Rate limit exceeded")) })
-        }
+            } else {
+                Err(ErrorTooManyRequests("Rate limit exceeded"))
+            }
+        })
     }
 }

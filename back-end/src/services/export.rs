@@ -75,12 +75,18 @@ impl ExportService {
         query_str.push_str(" ORDER BY timestamp DESC");
 
         // Create parameter vector
-        let mut params = vec![course_id.to_string()];
-        if let Some(start) = &start_date {
-            params.push(start.to_rfc3339());
+        let course_id_str = course_id.to_string();
+        let mut params = vec![course_id_str];
+
+        // Clone start/end dates to string to avoid temporary value drops
+        let start_date_str = start_date.map(|d| d.to_rfc3339());
+        let end_date_str = end_date.map(|d| d.to_rfc3339());
+
+        if let Some(start) = &start_date_str {
+            params.push(start.clone());
         }
-        if let Some(end) = &end_date {
-            params.push(end.to_rfc3339());
+        if let Some(end) = &end_date_str {
+            params.push(end.clone());
         }
 
         // Execute query based on the number of parameters

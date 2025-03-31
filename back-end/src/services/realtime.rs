@@ -41,7 +41,7 @@ impl Actor for WebSocketSession {
         let course_id = self.course_id;
         let realtime_service = self.realtime_service.clone();
 
-        // Use a simpler approach for spawning the future
+        // Use fut::wrap_future to handle future in actor context
         ctx.wait(fut::wrap_future::<_, Self>(async move {
             if let Err(e) = realtime_service.register(course_id, client_id).await {
                 eprintln!("Failed to register client: {}", e);
@@ -94,7 +94,6 @@ pub struct RealtimeService {
     clients: Arc<RwLock<HashMap<Uuid, Vec<String>>>>,
 }
 
-// Keep the rest of your RealtimeService implementation...
 impl RealtimeService {
     pub fn new() -> Self {
         Self {
@@ -145,14 +144,22 @@ impl RealtimeService {
     }
 }
 
-// This is now implemented as a real WebSocket handler above
-// We can keep this function declaration though, as it's used in main.rs
+// This is a modified version of the handler function to work with actix-web
 pub async fn ws_handler(
-    _req: actix_web::HttpRequest,
-    _stream: web::Payload,
-    _path: web::Path<String>,
-    _realtime_service: web::Data<Arc<RealtimeService>>,
-) -> Result<String> {
-    // The actual implementation is now in the WebSocketSession Actor
-    Ok("WebSocket connected".to_string())
+    req: actix_web::HttpRequest,
+    stream: web::Payload,
+    path: web::Path<String>,
+    realtime_service: web::Data<Arc<RealtimeService>>,
+) -> Result<actix_web::HttpResponse, actix_web::Error> {
+    // Parse course ID from path
+    let course_id = match Uuid::parse_str(&path.into_inner()) {
+        Ok(id) => id,
+        Err(_) => return Err(actix_web::error::ErrorBadRequest("Invalid course ID")),
+    };
+
+    // Create WebSocket session with the Arc<RealtimeService>
+    let ws_session = WebSocketSession::new(course_id, realtime_service.get_ref().clone());
+
+    // Start WebSocket connection
+    actix_web_actors::ws::start(ws_session, &req, stream)
 }
