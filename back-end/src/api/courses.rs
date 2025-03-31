@@ -192,7 +192,7 @@ pub async fn update_course(
     let news = course_data.news.unwrap_or(existing.news);
     let total_students = course_data
         .total_students
-        .unwrap_or(existing.total_students);
+        .unwrap_or(existing.total_students as i32);
     let logo_path = course_data.logo_path.unwrap_or(existing.logo_path);
 
     // Store temporary values
