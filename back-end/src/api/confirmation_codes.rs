@@ -1,6 +1,6 @@
 use crate::{AppState, errors::AppError, services::confirmation_codes};
 use actix_web::{HttpResponse, Responder, get, web};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 

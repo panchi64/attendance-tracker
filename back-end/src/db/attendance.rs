@@ -19,8 +19,8 @@ pub async fn record_attendance(
         payload.student_name,
         payload.student_id,
     )
-        .fetch_one(pool)
-        .await?;
+    .fetch_one(pool)
+    .await?;
     Ok(record)
 }
 
@@ -30,7 +30,7 @@ pub async fn fetch_attendance_for_course(
 ) -> Result<Vec<AttendanceRecord>, AppError> {
     let records = sqlx::query_as!(
         AttendanceRecord,
-         r#"
+        r#"
         SELECT id, course_id as "course_id: Uuid", student_name, student_id, timestamp
         FROM attendance_records
         WHERE course_id = $1
@@ -38,9 +38,39 @@ pub async fn fetch_attendance_for_course(
         "#,
         course_id
     )
-        .fetch_all(pool)
-        .await?;
+    .fetch_all(pool)
+    .await?;
     Ok(records)
+}
+
+pub async fn check_student_attendance_today(
+    pool: &SqlitePool,
+    course_id: Uuid,
+    student_id: &str,
+) -> Result<bool, AppError> {
+    // Get today's date in YYYY-MM-DD format
+    let today = chrono::Utc::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let result = sqlx::query!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM attendance_records
+        WHERE course_id = $1 
+        AND student_id = $2 
+        AND attendance_date = $3
+        "#,
+        course_id,
+        student_id,
+        today
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // Handle potential NULL result (convert to 0)
+    Ok(result.count > 0)
 }
 
 pub async fn fetch_todays_attendance_count(
@@ -48,19 +78,22 @@ pub async fn fetch_todays_attendance_count(
     course_id: Uuid,
 ) -> Result<i64, AppError> {
     // Get the start of the current day in UTC
-    let today_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap(); // UTC midnight
+    let today = chrono::Utc::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
 
     let result = sqlx::query!(
-         r#"
+        r#"
          SELECT COUNT(*) as count
          FROM attendance_records
-         WHERE course_id = $1 AND timestamp >= $2 -- Compare naive datetime directly
+         WHERE course_id = $1 AND attendance_date = $2
          "#,
-         course_id,
-         today_start // Pass the NaiveDateTime start of the day
-     )
-        .fetch_one(pool)
-        .await?;
+        course_id,
+        today
+    )
+    .fetch_one(pool)
+    .await?;
 
-    Ok(result.count) // Handle potential NULL count
+    Ok(result.count) // Handle potential NULL by defaulting to 0
 }

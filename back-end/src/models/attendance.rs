@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid; // To link to course.id
@@ -6,7 +6,7 @@ use uuid::Uuid; // To link to course.id
 // Structure for database interaction
 #[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct AttendanceRecord {
-    pub id: i64, // Primary key AUTOINCREMENT
+    pub id: i64,         // Primary key AUTOINCREMENT
     pub course_id: Uuid, // Foreign key
     pub student_name: String,
     pub student_id: String,
@@ -29,5 +29,5 @@ pub struct SubmitAttendancePayload {
 pub struct AttendanceResponse {
     pub message: String,
     pub student_name: String, // Echo back for confirmation message
-    // Optionally include the record ID or timestamp
+                              // Optionally include the record ID or timestamp
 }

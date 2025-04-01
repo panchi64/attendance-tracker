@@ -1,4 +1,3 @@
-use crate::db::courses::fetch_course_code_details;
 use crate::{
     db::courses as course_db, // Use alias
     errors::AppError,
