@@ -49,61 +49,52 @@ type CourseState = Omit<CoursePreferences, 'id'> & {
 };
 
 type CourseAction =
-    | { type: 'INITIALIZE_PREFERENCES'; payload: CoursePreferences }
-    | { type: 'SET_COURSE_ID'; payload: string | null }
-    | { type: 'SET_AVAILABLE_COURSES'; payload: AvailableCourse[] }
-    | { type: 'TOGGLE_CUSTOMIZING' }
-    | { type: 'SET_COURSE_NAME'; payload: string }
-    | { type: 'SET_SECTION_NUMBER'; payload: string }
-    | { type: 'SET_SECTIONS'; payload: string[] }
-    | { type: 'SET_PROFESSOR_NAME'; payload: string }
-    | { type: 'SET_OFFICE_HOURS'; payload: string }
-    | { type: 'SET_NEWS'; payload: string }
-    | { type: 'SET_TOTAL_STUDENTS'; payload: number }
-    | { type: 'SET_LOGO_PATH'; payload: string }
-    | { type: 'SET_CONFIRMATION_CODE'; payload: string }
-    | { type: 'SET_CODE_PROGRESS'; payload: number }
-    | { type: 'SET_PRESENT_COUNT'; payload: number }
-    | { type: 'TOGGLE_SECTION_DROPDOWN' }
-    | { type: 'TOGGLE_COURSE_DROPDOWN' }
-    | { type: 'CLOSE_ALL_DROPDOWNS' }
-    | { type: 'TOGGLE_EDITOR'; payload: keyof EditorState }
-    | { type: 'CLOSE_ALL_EDITORS' }
-    | { type: 'SET_LOADING'; payload: boolean }
-    | { type: 'SET_ERROR'; payload: string | null };
+  | { type: 'INITIALIZE_PREFERENCES'; payload: CoursePreferences; }
+  | { type: 'SET_COURSE_ID'; payload: string | null; }
+  | { type: 'SET_AVAILABLE_COURSES'; payload: AvailableCourse[]; }
+  | { type: 'TOGGLE_CUSTOMIZING'; }
+  | { type: 'SET_COURSE_NAME'; payload: string; }
+  | { type: 'SET_SECTION_NUMBER'; payload: string; }
+  | { type: 'SET_SECTIONS'; payload: string[]; }
+  | { type: 'SET_PROFESSOR_NAME'; payload: string; }
+  | { type: 'SET_OFFICE_HOURS'; payload: string; }
+  | { type: 'SET_NEWS'; payload: string; }
+  | { type: 'SET_TOTAL_STUDENTS'; payload: number; }
+  | { type: 'SET_LOGO_PATH'; payload: string; }
+  | { type: 'SET_CONFIRMATION_CODE'; payload: string; }
+  | { type: 'SET_CODE_PROGRESS'; payload: number; }
+  | { type: 'SET_PRESENT_COUNT'; payload: number; }
+  | { type: 'TOGGLE_SECTION_DROPDOWN'; }
+  | { type: 'TOGGLE_COURSE_DROPDOWN'; }
+  | { type: 'CLOSE_ALL_DROPDOWNS'; }
+  | { type: 'TOGGLE_EDITOR'; payload: keyof EditorState; }
+  | { type: 'CLOSE_ALL_EDITORS'; }
+  | { type: 'SET_LOADING'; payload: boolean; }
+  | { type: 'SET_ERROR'; payload: string | null; };
 
 // Initial state setup using preference service
 const getInitialState = (): CourseState => {
   const initialPrefsStore = loadPreferencesFromStorage();
-  const initialCourse = initialPrefsStore.currentCourseId
-      ? Object.values(initialPrefsStore.courses).find(c => c.id === initialPrefsStore.currentCourseId)
-      ?? Object.values(initialPrefsStore.courses)[0]
-      : {
-        id: null, courseName: "Course Name", sectionNumber: "000", sections: ["000"],
-        professorName: "Prof. Doe", officeHours: "By Appt", news: "", totalStudents: 0, logoPath: "/university-logo.png"
-      };
+  const currentCourseData = Object.values(initialPrefsStore.courses).find(c => c.id === initialPrefsStore.currentCourseId)!;
 
   return {
-    courseId: initialCourse?.id ?? null,
-    courseName: initialCourse?.courseName ?? "Course Name",
-    sectionNumber: initialCourse?.sectionNumber ?? "000",
-    sections: initialCourse?.sections ?? ["000"],
-    professorName: initialCourse?.professorName ?? "Prof. Doe",
-    officeHours: initialCourse?.officeHours ?? "By Appt",
-    news: initialCourse?.news ?? "",
-    totalStudents: initialCourse?.totalStudents ?? 0,
-    logoPath: initialCourse?.logoPath ?? "/university-logo.png",
-    isLoading: true,
+    courseId: currentCourseData.id,
+    courseName: currentCourseData.courseName,
+    sectionNumber: currentCourseData.sectionNumber,
+    sections: currentCourseData.sections,
+    professorName: currentCourseData.professorName,
+    officeHours: currentCourseData.officeHours,
+    news: currentCourseData.news,
+    totalStudents: currentCourseData.totalStudents,
+    logoPath: currentCourseData.logoPath,
+    isLoading: true, // Start in loading state, useEffect will fetch real data
     isCustomizing: false,
     presentCount: 0,
     confirmationCode: "...",
     codeProgress: 100,
-    availableCourses: [],
+    availableCourses: [], // Populated by useEffect
     dropdowns: { section: false, course: false },
-    editing: {
-      courseName: false, professorName: false, officeHours: false,
-      news: false, totalStudents: false,
-    },
+    editing: { courseName: false, professorName: false, officeHours: false, news: false, totalStudents: false },
     error: null
   };
 };
@@ -145,8 +136,8 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
       return { ...state, courseName: action.payload };
     case 'SET_SECTION_NUMBER':
       const newSections = state.sections.includes(action.payload)
-          ? state.sections
-          : [...state.sections, action.payload].sort();
+        ? state.sections
+        : [...state.sections, action.payload].sort();
       return { ...state, sectionNumber: action.payload, sections: newSections };
     case 'SET_SECTIONS':
       const currentSectionValid = action.payload.includes(state.sectionNumber);
@@ -173,13 +164,13 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
     case 'SET_PRESENT_COUNT':
       return { ...state, presentCount: action.payload };
     case 'TOGGLE_SECTION_DROPDOWN':
-      return { ...state, dropdowns: { section: !state.dropdowns.section, course: false }};
+      return { ...state, dropdowns: { section: !state.dropdowns.section, course: false } };
     case 'TOGGLE_COURSE_DROPDOWN':
-      return { ...state, dropdowns: { section: false, course: !state.dropdowns.course }};
+      return { ...state, dropdowns: { section: false, course: !state.dropdowns.course } };
     case 'CLOSE_ALL_DROPDOWNS':
-      return { ...state, dropdowns: { section: false, course: false }};
+      return { ...state, dropdowns: { section: false, course: false } };
     case 'TOGGLE_EDITOR':
-      return { ...state, editing: { ...getInitialState().editing, [action.payload]: !state.editing[action.payload] }};
+      return { ...state, editing: { ...getInitialState().editing, [action.payload]: !state.editing[action.payload] } };
     case 'CLOSE_ALL_EDITORS':
       return { ...state, editing: getInitialState().editing };
     case 'SET_LOADING':
@@ -196,7 +187,7 @@ function useAttendanceWebSocket(courseId: string | null, onMessage: (count: numb
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const wsErrorRef = useRef<string|null>(null);
+  const wsErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     wsErrorRef.current = null;
@@ -245,7 +236,7 @@ function useAttendanceWebSocket(courseId: string | null, onMessage: (count: numb
     return () => {
       isMounted = false;
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if(wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
       setIsConnected(false);
     };
   }, [courseId, onMessage]);
@@ -320,7 +311,7 @@ export default function Dashboard() {
 
   // --- WebSocket Hook ---
   const { isConnected: isWsConnected, error: wsError } = useAttendanceWebSocket(
-      state.courseId, useCallback((count: number) => dispatch({ type: 'SET_PRESENT_COUNT', payload: count }), [])
+    state.courseId, useCallback((count: number) => dispatch({ type: 'SET_PRESENT_COUNT', payload: count }), [])
   );
   // --- End WebSocket ---
 
@@ -399,7 +390,7 @@ export default function Dashboard() {
       }
       // Cancel new course creation if clicking outside its area?
       if (isOutsideNewCourse) {
-         handleCancelCreateCourse();
+        handleCancelCreateCourse();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -568,14 +559,14 @@ export default function Dashboard() {
   // --- End Handler Functions ---
 
   // --- Loading Indicator ---
-  if (state.isLoading && !prevSavedPrefsJsonRef.current) { // Show only on initial load
+  if (state.isLoading && state.courseId === null) { // Show only on initial load
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-            <p className="text-gray-500 mt-4">Loading attendance tracker data...</p>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+          <p className="text-gray-500 mt-4">Loading attendance tracker data...</p>
         </div>
+      </div>
     );
   }
   // --- End Loading Indicator ---
@@ -584,174 +575,174 @@ export default function Dashboard() {
   const qrCodeUrl = state.courseId ? `/api/qrcode/${state.courseId}` : '/placeholder-qr.png';
 
   return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
-          {/* WebSocket Status Indicator */}
-          <div className={`text-xs px-2 py-0.5 text-white text-center ${isWsConnected ? 'bg-green-500' : 'bg-red-500'}`}>
-            {isWsConnected ? 'Real-time connection active' : (wsError || 'Real-time connection inactive')}
-          </div>
-
-          {/* Error Display */}
-          {state.error && (
-              <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
-                <strong className="font-bold block">Error!</strong>
-                <span className="block sm:inline">{state.error}</span>
-                <button onClick={() => dispatch({ type: 'SET_ERROR', payload: null })} className="absolute top-0 bottom-0 right-0 px-4 py-3 text-red-500 hover:text-red-800" aria-label="Dismiss error">×</button>
-              </div>
-          )}
-
-          {/* --- Header --- */}
-          <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
-            {/* Left Side: Logo & Office Hours */}
-            <div className="flex items-center gap-6 w-full sm:w-auto">
-              <LogoUploader isCustomizing={state.isCustomizing} defaultLogoPath={state.logoPath} onLogoChange={handleLogoChange} courseId={state.courseId} />
-              <div className="flex-grow">
-                {state.isCustomizing && state.editing.officeHours ? (
-                    <div>
-                      <label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</label>
-                      <input id="officeHoursInput" ref={setInputRef('officeHours')} type="text" value={state.officeHours} onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className="text-lg sm:text-xl font-medium text-gray-800 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" />
-                    </div>
-                ) : (
-                    <div onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className={`${state.isCustomizing ? "cursor-pointer group" : ""}`}>
-                      <div className="text-sm font-medium text-gray-500 flex items-center">Office Hours {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
-                      <div className="text-lg sm:text-xl font-medium text-gray-800 mt-0.5">{state.officeHours || "-"}</div>
-                    </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right Side: Course Name, Section, Professor */}
-            <div className="text-right w-full sm:w-auto">
-              <div className="flex items-center justify-end">
-                {state.isCustomizing && state.editing.courseName ? (
-                    <input ref={setInputRef('courseName')} type="text" value={state.courseName} onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })} className="text-2xl sm:text-3xl font-bold text-gray-900 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent text-right" placeholder="Course Name" />
-                ) : (
-                    <div className={`text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.courseName}</div>
-                )}
-                <span className="text-2xl sm:text-3xl font-bold mx-2 text-gray-500">-</span>
-                <div className="relative" ref={sectionDropdownRef}>
-                  <button className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_SECTION_DROPDOWN' })} disabled={!state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.section}> {state.sectionNumber} {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</button>
-                  {state.dropdowns.section && state.isCustomizing && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-60 overflow-y-auto">
-                        {state.sections.map((section) => ( <li key={section}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${section === state.sectionNumber ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => { dispatch({ type: 'SET_SECTION_NUMBER', payload: section }); dispatch({ type: 'CLOSE_ALL_DROPDOWNS' }); }}>{section}</button></li> ))}
-                        <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={addNewSection}>+ Add new section</button></li>
-                      </ul></div>
-                  )}
-                </div>
-              </div>
-              <div className="mt-1.5">
-                {state.isCustomizing && state.editing.professorName ? (
-                    <input ref={setInputRef('professorName')} type="text" value={state.professorName} onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })} className="text-base sm:text-lg text-right text-gray-600 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" placeholder="Professor Name" />
-                ) : (
-                    <div className={`text-base sm:text-lg text-right text-gray-600 flex items-center justify-end group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.professorName}</div>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* --- End Header --- */}
-
-          {/* --- Main Content --- */}
-          <div className="flex flex-col md:flex-row bg-white">
-            {/* Left Side: Attendance Count & News */}
-            <div className="w-full md:w-2/3 p-6 md:p-8">
-              <div className="flex items-baseline mb-6">
-                <span className="text-5xl sm:text-6xl font-bold text-gray-900">Present:</span>
-                <span className="text-5xl sm:text-6xl font-bold text-gray-900 ml-3">{state.presentCount}</span>
-                {state.isCustomizing && state.editing.totalStudents ? (
-                    <div className="flex items-baseline ml-2"><span className="text-2xl sm:text-3xl text-gray-400 font-medium">/</span><input ref={setInputRef('totalStudents')} type="number" min="0" value={state.totalStudents} onChange={(e) => dispatch({ type: 'SET_TOTAL_STUDENTS', payload: parseInt(e.target.value, 10) || 0 })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })} className="text-2xl sm:text-3xl text-gray-400 font-medium w-16 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 text-center ml-1" /></div>
-                ) : (
-                    <div className={`flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })}><span className="text-2xl sm:text-3xl text-gray-400 ml-2 font-medium">/{state.totalStudents}</span> {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
-                )}
-              </div>
-              <div className="border-t border-gray-300 pt-6">
-                <h2 className="text-xl sm:text-2xl font-bold mb-3 text-gray-800">News / Comments</h2>
-                {state.isCustomizing && state.editing.news ? (
-                    <textarea ref={setInputRef('news')} className="w-full h-40 border border-gray-300 p-3 rounded-md text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base sm:text-lg whitespace-pre-wrap font-sans resize-y" value={state.news} onChange={(e) => dispatch({ type: 'SET_NEWS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })} placeholder="Enter any news or comments for the class..." />
-                ) : (
-                    <div className={`text-base sm:text-lg text-gray-700 p-3 rounded-md min-h-[6rem] whitespace-pre-wrap group relative ${state.isCustomizing ? "cursor-pointer hover:bg-gray-50" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}>{state.news || <span className="text-gray-400 italic">No news or comments entered.</span>} {state.isCustomizing && ( <Pencil className="absolute top-2 right-2 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" /> )}</div>
-                )}
-              </div>
-            </div>
-
-            {/* Right Side: QR Code & Confirmation */}
-            <div className="w-full md:w-1/3 p-6 md:p-8 border-t md:border-t-0 md:border-l border-gray-300 flex flex-col items-center justify-between bg-gray-50">
-              <div className="w-full max-w-[250px] aspect-square relative p-4 bg-white rounded-lg shadow-sm mb-6">
-                {state.courseId ? (<Image src={qrCodeUrl} alt="QR Code for Attendance" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain" priority />) : (<div className="flex items-center justify-center h-full text-gray-400 text-center text-sm p-4">Select or create a course to generate QR code.</div>)}
-              </div>
-              <div className="w-full text-center">
-                <div className="text-lg sm:text-xl text-gray-700 font-medium">Confirmation Code</div>
-                <div className={`text-6xl sm:text-7xl font-bold text-gray-900 mt-2 tracking-widest ${state.confirmationCode === '...' ? 'animate-pulse text-gray-300' : ''}`}>{state.confirmationCode}</div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4 overflow-hidden"> <div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000 ease-linear" style={{ width: `${state.codeProgress}%` }}></div> </div>
-                <p className="text-xs text-gray-500 mt-1">Code refreshes periodically.</p>
-              </div>
-            </div>
-          </div>
-          {/* --- End Main Content --- */}
-
-          {/* --- Footer --- */}
-          <div className="flex flex-col sm:flex-row justify-between items-center p-4 sm:p-6 border-t border-gray-300 bg-gray-50 gap-3">
-            {/* Left Side: Date/Time */}
-            <div className="text-sm sm:text-base font-medium text-gray-500 text-center sm:text-left">
-              <div>{format(currentTime, "EEEE, MMMM do yyyy")}</div>
-              <div>{format(currentTime, "h:mm:ss a")}</div>
-            </div>
-
-            {/* Right Side: Action Buttons / Create Course Form */}
-            {isCreatingCourse ? (
-                // --- Create Course Input Form ---
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
-                  <input
-                      ref={newCourseInputRef}
-                      type="text"
-                      placeholder="New Course Name..."
-                      value={newCourseNameInput}
-                      onChange={(e) => setNewCourseNameInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleConfirmCreateCourse()}
-                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                      disabled={state.isLoading}
-                  />
-                  <button
-                      onClick={handleConfirmCreateCourse}
-                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
-                      disabled={state.isLoading || !newCourseNameInput.trim()}
-                  >
-                    {state.isLoading ? "Creating..." : "Create"}
-                  </button>
-                  <button
-                      onClick={handleCancelCreateCourse}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
-                      disabled={state.isLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                // --- End Create Course Input Form ---
-            ) : (
-                // --- Standard Footer Buttons ---
-                <div className="flex flex-wrap gap-2 sm:gap-3 relative justify-center sm:justify-end">
-                  {state.isCustomizing && state.courseId && (
-                      <button title="Delete Current Course" className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs sm:text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleDeleteCurrentCourse} disabled={state.isLoading}> Delete Course </button>
-                  )}
-                  {state.isCustomizing ? (
-                      <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleSaveOrUpdateCourse} disabled={state.isLoading || !state.courseName.trim()}> {state.isLoading ? "Saving..." : "Save Changes"} </button>
-                  ) : ( <button className="px-4 py-2 bg-gray-200 text-gray-400 rounded-md text-sm shadow-sm cursor-not-allowed" disabled={true}> Save Changes </button> )}
-                  <div className="relative" ref={courseDropdownRef}>
-                    <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={() => dispatch({ type: 'TOGGLE_COURSE_DROPDOWN' })} disabled={state.isLoading || state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.course}> Switch Course </button>
-                    {state.dropdowns.course && (
-                        <div className="absolute right-0 bottom-full mb-2 w-56 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-64 overflow-y-auto">
-                          {state.availableCourses.map((course) => ( <li key={course.id}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${course.id === state.courseId ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => handleSwitchCourse(course.id)} disabled={course.id === state.courseId}>{course.name}</button></li> ))}
-                          <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={handleInitiateCreateCourse} disabled={state.isLoading || state.isCustomizing}>+ Create New Course</button></li>
-                        </ul></div>
-                    )}
-                  </div>
-                  <button className={`px-4 py-2 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50 ${ state.isCustomizing ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900' }`} onClick={() => { if (state.isCustomizing) { handleSaveOrUpdateCourse(); } else { dispatch({ type: 'TOGGLE_CUSTOMIZING' }); } }} disabled={state.isLoading}> {state.isCustomizing ? 'Done & Save' : 'Customize'} </button>
-                </div>
-                // --- End Standard Footer Buttons ---
-            )}
-          </div>
-          {/* --- End Footer --- */}
-
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
+        {/* WebSocket Status Indicator */}
+        <div className={`text-xs px-2 py-0.5 text-white text-center ${isWsConnected ? 'bg-green-500' : 'bg-red-500'}`}>
+          {isWsConnected ? 'Real-time connection active' : (wsError || 'Real-time connection inactive')}
         </div>
+
+        {/* Error Display */}
+        {state.error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
+            <strong className="font-bold block">Error!</strong>
+            <span className="block sm:inline">{state.error}</span>
+            <button onClick={() => dispatch({ type: 'SET_ERROR', payload: null })} className="absolute top-0 bottom-0 right-0 px-4 py-3 text-red-500 hover:text-red-800" aria-label="Dismiss error">×</button>
+          </div>
+        )}
+
+        {/* --- Header --- */}
+        <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
+          {/* Left Side: Logo & Office Hours */}
+          <div className="flex items-center gap-6 w-full sm:w-auto">
+            <LogoUploader isCustomizing={state.isCustomizing} defaultLogoPath={state.logoPath} onLogoChange={handleLogoChange} courseId={state.courseId} />
+            <div className="flex-grow">
+              {state.isCustomizing && state.editing.officeHours ? (
+                <div>
+                  <label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</label>
+                  <input id="officeHoursInput" ref={setInputRef('officeHours')} type="text" value={state.officeHours} onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className="text-lg sm:text-xl font-medium text-gray-800 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" />
+                </div>
+              ) : (
+                <div onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className={`${state.isCustomizing ? "cursor-pointer group" : ""}`}>
+                  <div className="text-sm font-medium text-gray-500 flex items-center">Office Hours {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
+                  <div className="text-lg sm:text-xl font-medium text-gray-800 mt-0.5">{state.officeHours || "-"}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Side: Course Name, Section, Professor */}
+          <div className="text-right w-full sm:w-auto">
+            <div className="flex items-center justify-end">
+              {state.isCustomizing && state.editing.courseName ? (
+                <input ref={setInputRef('courseName')} type="text" value={state.courseName} onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })} className="text-2xl sm:text-3xl font-bold text-gray-900 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent text-right" placeholder="Course Name" />
+              ) : (
+                <div className={`text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.courseName}</div>
+              )}
+              <span className="text-2xl sm:text-3xl font-bold mx-2 text-gray-500">-</span>
+              <div className="relative" ref={sectionDropdownRef}>
+                <button className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_SECTION_DROPDOWN' })} disabled={!state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.section}> {state.sectionNumber} {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</button>
+                {state.dropdowns.section && state.isCustomizing && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-60 overflow-y-auto">
+                    {state.sections.map((section) => (<li key={section}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${section === state.sectionNumber ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => { dispatch({ type: 'SET_SECTION_NUMBER', payload: section }); dispatch({ type: 'CLOSE_ALL_DROPDOWNS' }); }}>{section}</button></li>))}
+                    <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={addNewSection}>+ Add new section</button></li>
+                  </ul></div>
+                )}
+              </div>
+            </div>
+            <div className="mt-1.5">
+              {state.isCustomizing && state.editing.professorName ? (
+                <input ref={setInputRef('professorName')} type="text" value={state.professorName} onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })} className="text-base sm:text-lg text-right text-gray-600 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" placeholder="Professor Name" />
+              ) : (
+                <div className={`text-base sm:text-lg text-right text-gray-600 flex items-center justify-end group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.professorName}</div>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* --- End Header --- */}
+
+        {/* --- Main Content --- */}
+        <div className="flex flex-col md:flex-row bg-white">
+          {/* Left Side: Attendance Count & News */}
+          <div className="w-full md:w-2/3 p-6 md:p-8">
+            <div className="flex items-baseline mb-6">
+              <span className="text-5xl sm:text-6xl font-bold text-gray-900">Present:</span>
+              <span className="text-5xl sm:text-6xl font-bold text-gray-900 ml-3">{state.presentCount}</span>
+              {state.isCustomizing && state.editing.totalStudents ? (
+                <div className="flex items-baseline ml-2"><span className="text-2xl sm:text-3xl text-gray-400 font-medium">/</span><input ref={setInputRef('totalStudents')} type="number" min="0" value={state.totalStudents} onChange={(e) => dispatch({ type: 'SET_TOTAL_STUDENTS', payload: parseInt(e.target.value, 10) || 0 })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })} className="text-2xl sm:text-3xl text-gray-400 font-medium w-16 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 text-center ml-1" /></div>
+              ) : (
+                <div className={`flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })}><span className="text-2xl sm:text-3xl text-gray-400 ml-2 font-medium">/{state.totalStudents}</span> {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
+              )}
+            </div>
+            <div className="border-t border-gray-300 pt-6">
+              <h2 className="text-xl sm:text-2xl font-bold mb-3 text-gray-800">News / Comments</h2>
+              {state.isCustomizing && state.editing.news ? (
+                <textarea ref={setInputRef('news')} className="w-full h-40 border border-gray-300 p-3 rounded-md text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base sm:text-lg whitespace-pre-wrap font-sans resize-y" value={state.news} onChange={(e) => dispatch({ type: 'SET_NEWS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })} placeholder="Enter any news or comments for the class..." />
+              ) : (
+                <div className={`text-base sm:text-lg text-gray-700 p-3 rounded-md min-h-[6rem] whitespace-pre-wrap group relative ${state.isCustomizing ? "cursor-pointer hover:bg-gray-50" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}>{state.news || <span className="text-gray-400 italic">No news or comments entered.</span>} {state.isCustomizing && (<Pencil className="absolute top-2 right-2 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />)}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Side: QR Code & Confirmation */}
+          <div className="w-full md:w-1/3 p-6 md:p-8 border-t md:border-t-0 md:border-l border-gray-300 flex flex-col items-center justify-between bg-gray-50">
+            <div className="w-full max-w-[250px] aspect-square relative p-4 bg-white rounded-lg shadow-sm mb-6">
+              {state.courseId ? (<Image src={qrCodeUrl} alt="QR Code for Attendance" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain" priority />) : (<div className="flex items-center justify-center h-full text-gray-400 text-center text-sm p-4">Select or create a course to generate QR code.</div>)}
+            </div>
+            <div className="w-full text-center">
+              <div className="text-lg sm:text-xl text-gray-700 font-medium">Confirmation Code</div>
+              <div className={`text-6xl sm:text-7xl font-bold text-gray-900 mt-2 tracking-widest ${state.confirmationCode === '...' ? 'animate-pulse text-gray-300' : ''}`}>{state.confirmationCode}</div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4 overflow-hidden"> <div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000 ease-linear" style={{ width: `${state.codeProgress}%` }}></div> </div>
+              <p className="text-xs text-gray-500 mt-1">Code refreshes periodically.</p>
+            </div>
+          </div>
+        </div>
+        {/* --- End Main Content --- */}
+
+        {/* --- Footer --- */}
+        <div className="flex flex-col sm:flex-row justify-between items-center p-4 sm:p-6 border-t border-gray-300 bg-gray-50 gap-3">
+          {/* Left Side: Date/Time */}
+          <div className="text-sm sm:text-base font-medium text-gray-500 text-center sm:text-left">
+            <div>{format(currentTime, "EEEE, MMMM do yyyy")}</div>
+            <div>{format(currentTime, "h:mm:ss a")}</div>
+          </div>
+
+          {/* Right Side: Action Buttons / Create Course Form */}
+          {isCreatingCourse ? (
+            // --- Create Course Input Form ---
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
+              <input
+                ref={newCourseInputRef}
+                type="text"
+                placeholder="New Course Name..."
+                value={newCourseNameInput}
+                onChange={(e) => setNewCourseNameInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmCreateCourse()}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                disabled={state.isLoading}
+              />
+              <button
+                onClick={handleConfirmCreateCourse}
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+                disabled={state.isLoading || !newCourseNameInput.trim()}
+              >
+                {state.isLoading ? "Creating..." : "Create"}
+              </button>
+              <button
+                onClick={handleCancelCreateCourse}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+                disabled={state.isLoading}
+              >
+                Cancel
+              </button>
+            </div>
+            // --- End Create Course Input Form ---
+          ) : (
+            // --- Standard Footer Buttons ---
+            <div className="flex flex-wrap gap-2 sm:gap-3 relative justify-center sm:justify-end">
+              {state.isCustomizing && state.courseId && (
+                <button title="Delete Current Course" className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs sm:text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleDeleteCurrentCourse} disabled={state.isLoading}> Delete Course </button>
+              )}
+              {state.isCustomizing ? (
+                <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleSaveOrUpdateCourse} disabled={state.isLoading || !state.courseName.trim()}> {state.isLoading ? "Saving..." : "Save Changes"} </button>
+              ) : (<button className="px-4 py-2 bg-gray-200 text-gray-400 rounded-md text-sm shadow-sm cursor-not-allowed" disabled={true}> Save Changes </button>)}
+              <div className="relative" ref={courseDropdownRef}>
+                <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={() => dispatch({ type: 'TOGGLE_COURSE_DROPDOWN' })} disabled={state.isLoading || state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.course}> Switch Course </button>
+                {state.dropdowns.course && (
+                  <div className="absolute right-0 bottom-full mb-2 w-56 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-64 overflow-y-auto">
+                    {state.availableCourses.map((course) => (<li key={course.id}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${course.id === state.courseId ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => handleSwitchCourse(course.id)} disabled={course.id === state.courseId}>{course.name}</button></li>))}
+                    <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={handleInitiateCreateCourse} disabled={state.isLoading || state.isCustomizing}>+ Create New Course</button></li>
+                  </ul></div>
+                )}
+              </div>
+              <button className={`px-4 py-2 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50 ${state.isCustomizing ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900'}`} onClick={() => { if (state.isCustomizing) { handleSaveOrUpdateCourse(); } else { dispatch({ type: 'TOGGLE_CUSTOMIZING' }); } }} disabled={state.isLoading}> {state.isCustomizing ? 'Done & Save' : 'Customize'} </button>
+            </div>
+            // --- End Standard Footer Buttons ---
+          )}
+        </div>
+        {/* --- End Footer --- */}
+
       </div>
+    </div>
   );
 }

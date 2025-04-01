@@ -64,6 +64,26 @@ const defaultPreferences: PreferencesStore = {
     }
 };
 
+const createDefaultPreferences = (): PreferencesStore => {
+    const defaultId = uuidv4();
+    return {
+        currentCourseId: defaultId,
+        courses: {
+            'Default Course': {
+                id: defaultId,
+                courseName: 'Default Course',
+                sectionNumber: '000',
+                sections: ['000'], // Keep simple
+                professorName: 'Prof. Doe',
+                officeHours: 'By Appt',
+                news: '',
+                totalStudents: 0, // Start with 0
+                logoPath: '/university-logo.png'
+            }
+        }
+    };
+};
+
 /**
  * Transform backend course format to frontend format
  */
@@ -108,33 +128,44 @@ const transformFrontendCourse = (frontendCourse: CoursePreferences): Omit<Backen
  * Load preferences (currentCourseId and course map) from local storage
  */
 export const loadPreferencesFromStorage = (): PreferencesStore => {
-    if (typeof window === 'undefined') return { ...defaultPreferences }; // Return a copy
+    if (typeof window === 'undefined') return createDefaultPreferences();
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return { ...defaultPreferences }; // Return a copy
+    if (!saved) return createDefaultPreferences();
     try {
         const parsed = JSON.parse(saved) as PreferencesStore;
-        // Basic validation and fallback logic
-        if (parsed.courses && typeof parsed.currentCourseId !== 'undefined') {
-            const courseIds = Object.values(parsed.courses).map(c => c.id);
-            // If currentCourseId is null or points to a course not in the map
-            if (!parsed.currentCourseId || !courseIds.includes(parsed.currentCourseId)) {
-                const firstCourseId = courseIds[0]; // Get ID of the first course in the map
-                if (firstCourseId) {
-                    parsed.currentCourseId = firstCourseId;
-                    console.log("Resetting currentCourseId to first available:", firstCourseId);
-                } else {
-                    // No courses in map, reset entirely to default
-                    console.log("No courses found in storage, resetting to default preferences.");
-                    return { ...defaultPreferences }; // Return a copy
-                }
-            }
-            return parsed;
+
+        // Validate structure
+        if (!parsed || typeof parsed !== 'object' || !parsed.courses || typeof parsed.currentCourseId === 'undefined') {
+            console.warn("Invalid structure in parsed preferences, resetting to default.");
+            return createDefaultPreferences();
         }
-        console.log("Parsed preferences invalid, resetting to default.");
-        return { ...defaultPreferences }; // Return a copy
+
+        const coursesMap = parsed.courses;
+        const courseArray = Object.values(coursesMap);
+        const currentId = parsed.currentCourseId;
+
+        // Check if courses map is empty
+        if (courseArray.length === 0) {
+            console.warn("Preferences courses map is empty, resetting to default.");
+            return createDefaultPreferences();
+        }
+
+        // Check if currentCourseId is valid within the map
+        const currentCourseExists = currentId && courseArray.some(c => c.id === currentId);
+
+        if (!currentCourseExists) {
+            // If current ID is invalid or null, set it to the first course's ID
+            parsed.currentCourseId = courseArray[0].id;
+            console.warn(`Invalid/missing currentCourseId, resetting to first course: ${parsed.currentCourseId}`);
+        }
+
+        return parsed; // Return the validated/corrected parsed state
     } catch (e) {
         console.error("Failed to parse preferences from storage, using default:", e);
-        return { ...defaultPreferences }; // Return a copy
+        // Clear potentially corrupted storage
+        try { localStorage.removeItem(STORAGE_KEY); } catch (error) {
+            console.log(error);}
+        return createDefaultPreferences();
     }
 };
 
@@ -144,10 +175,13 @@ export const loadPreferencesFromStorage = (): PreferencesStore => {
 export const savePreferencesToStorage = (preferences: PreferencesStore): void => {
     if (typeof window === 'undefined') return;
     try {
+        // Basic validation before saving
+        if (!preferences || !preferences.courses || typeof preferences.currentCourseId === 'undefined' || Object.keys(preferences.courses).length === 0) {
+            console.error("Attempted to save invalid preferences structure:", preferences);
+            return; // Don't save invalid state
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    } catch (e) {
-        console.error("Failed to save preferences to storage:", e);
-    }
+    } catch (e) { console.error("Failed to save preferences to storage:", e); }
 };
 
 /**
@@ -199,20 +233,14 @@ export const loadCurrentCourseIdFromBackend = async (): Promise<string | null> =
  * Load the full details of the current course based on the ID stored locally or fetched from backend.
  */
 export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences> => {
-    const prefs = loadPreferencesFromStorage(); // Get local state first
-    let currentId = prefs.currentCourseId;
+    let currentId: string | null = null;
+    const localPrefs = loadPreferencesFromStorage(); // Load validated local state
 
-    // If local storage has no ID, try fetching from backend preference endpoint
+    // Determine the target ID: try local, then backend preference
+    currentId = localPrefs.currentCourseId;
     if (!currentId) {
-        console.log("No currentCourseId in local storage, fetching from /api/preferences");
         currentId = await loadCurrentCourseIdFromBackend();
-        if (currentId) {
-            prefs.currentCourseId = currentId;
-            // Don't save back to storage yet, wait until we successfully load the course details
-        } else {
-            console.log("No current course ID found on backend either.");
-            // Fall through to fallback logic below
-        }
+        // If backend also has no preference, we'll hit the fallback later
     }
 
     // Try fetching the course details using the determined ID
@@ -223,47 +251,49 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
             if (courseResponse.ok) {
                 const backendCourse = await courseResponse.json() as BackendCourse;
                 const transformed = transformBackendCourse(backendCourse);
-                // Successfully fetched, update local storage fully
-                prefs.currentCourseId = transformed.id; // Ensure ID matches fetched one
-                prefs.courses[transformed.courseName] = transformed;
-                savePreferencesToStorage(prefs);
-                console.log(`Successfully loaded current course: ${transformed.courseName} (${transformed.id})`);
+                // Update local storage with fetched data and correct currentId
+                localPrefs.currentCourseId = transformed.id; // Confirm ID
+                localPrefs.courses = { ...localPrefs.courses, [transformed.courseName]: transformed }; // Update/add
+                savePreferencesToStorage(localPrefs);
                 return transformed;
             } else if (courseResponse.status === 404) {
-                console.warn(`Current course ID ${currentId} not found on backend. Removing from local prefs.`);
-                const courseName = Object.entries(prefs.courses).find(([, c]) => c.id === currentId)?.[0];
-                if (courseName) delete prefs.courses[courseName];
-                prefs.currentCourseId = null;
-                savePreferencesToStorage(prefs);
-                currentId = null; // Clear ID so fallback logic runs
-            } else {
-                console.error(`Error fetching course ${currentId} (${courseResponse.status}): ${courseResponse.statusText}`);
-                // Fall through to fallback logic
-            }
+                console.warn(`Current course ID ${currentId} not found on backend.`);
+                // Remove potentially stale course from local map if it exists
+                const staleCourseName = Object.entries(localPrefs.courses).find(([, c]) => c.id === currentId)?.[0];
+                if (staleCourseName) delete localPrefs.courses[staleCourseName];
+                // Clear current ID to trigger fallback below
+                localPrefs.currentCourseId = null;
+                currentId = null; // Ensure fallback runs
+                savePreferencesToStorage(localPrefs); // Save the cleanup
+            } else { /* Handle other non-404 fetch errors */ }
         } catch (error) {
-            console.error(`Network/parse error loading course ${currentId}:`, error);
-            // Fall through to fallback logic
+            console.log(error);
         }
     }
 
-    // Fallback: If no ID, ID not found, or fetch failed, load all and pick first/default
+    // --- Fallback Logic ---
     console.log("Executing fallback: Loading all courses...");
     const allCourses = await loadCoursesFromBackend();
     if (allCourses.length > 0) {
+        // Found courses on backend, use the first one
         const firstCourse = allCourses[0];
-        prefs.currentCourseId = firstCourse.id; // Set first course as current
-        // Rebuild local course map from fetched data
-        prefs.courses = {};
-        allCourses.forEach(c => { prefs.courses[c.courseName] = c; });
-        savePreferencesToStorage(prefs);
+        const newPrefs: PreferencesStore = {
+            currentCourseId: firstCourse.id,
+            courses: {}
+        };
+        allCourses.forEach(c => { newPrefs.courses[c.courseName] = c; });
+        savePreferencesToStorage(newPrefs); // Overwrite local storage with backend state
         console.log(`Fallback successful: Set current course to ${firstCourse.courseName} (${firstCourse.id})`);
         return firstCourse;
+    } else {
+        // --- Ultimate Fallback: No courses anywhere ---
+        // Ensure local storage reflects a valid default state
+        console.warn("No courses found on backend, ensuring default preferences.");
+        const defaultPrefs = createDefaultPreferences();
+        savePreferencesToStorage(defaultPrefs);
+        // Return the default course object
+        return Object.values(defaultPrefs.courses)[0];
     }
-
-    // Ultimate fallback: return default if backend is empty and local storage was bad/empty
-    console.warn("No courses found anywhere, resetting to default preferences.");
-    savePreferencesToStorage(defaultPreferences); // Reset storage
-    return defaultPreferences.courses['Default Course'];
 };
 
 /**
@@ -327,7 +357,7 @@ export const saveCoursePreferences = async (coursePreferences: CoursePreferences
 /**
  * Get list of available courses (ID and Name only)
  */
-export const getAvailableCourses = async (): Promise<Array<{ id: string, name: string }>> => {
+export const getAvailableCourses = async (): Promise<Array<{ id: string, name: string; }>> => {
     try {
         const response = await fetch('/api/courses');
         if (!response.ok) {
@@ -382,7 +412,7 @@ export const createNewCourse = async (courseName: string, initialPreferences?: P
                     currentPrefs.currentCourseId = savedCourse.id;
                     savePreferencesToStorage(currentPrefs);
                 }
-            } catch(prefError) {
+            } catch (prefError) {
                 console.error("Failed to set new course as current on backend, but course was created:", prefError);
                 // Course creation succeeded, but setting it current failed. UI might need refresh.
             }
@@ -488,21 +518,20 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
             console.warn(`Course ID ${courseId} (Name: ${courseName || 'unknown'}) not found in local map for deletion.`);
         }
 
-
         // If deleted course was current, switch to another course or clear/reset
         if (prefs.currentCourseId === courseId) {
             console.log(`Deleted course ${courseId} was the current course.`);
             const remainingCourses = Object.values(prefs.courses);
             if (remainingCourses.length > 0) {
-                updatedCurrentId = remainingCourses[0].id; // Switch to first remaining
-                console.log(`Setting current course to first remaining: ${remainingCourses[0].courseName} (${updatedCurrentId})`);
+                updatedCurrentId = remainingCourses[0].id;
             } else {
                 // No courses left, reset to default preferences object entirely
                 console.log("No courses left after deletion, resetting to default preferences.");
-                Object.assign(prefs, defaultPreferences); // Overwrite prefs with default
-                updatedCurrentId = prefs.currentCourseId; // Get the new default ID
+                const defaultP = createDefaultPreferences(); // Get fresh default
+                prefs.courses = defaultP.courses;            // Assign default courses map
+                updatedCurrentId = defaultP.currentCourseId; // Assign default ID
             }
-            prefs.currentCourseId = updatedCurrentId;
+            prefs.currentCourseId = updatedCurrentId; // Update current ID in prefs
 
             // Update backend preference if current ID changed
             if (updatedCurrentId) {
