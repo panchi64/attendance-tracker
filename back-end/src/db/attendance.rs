@@ -31,15 +31,15 @@ pub async fn fetch_attendance_for_course(
     let records = sqlx::query_as!(
         AttendanceRecord,
         r#"
-        SELECT id, course_id as "course_id: Uuid", student_name, student_id, timestamp
+        SELECT id as "id!", course_id as "course_id: Uuid", student_name, student_id, timestamp
         FROM attendance_records
         WHERE course_id = $1
         ORDER BY timestamp DESC
         "#,
         course_id
     )
-    .fetch_all(pool)
-    .await?;
+        .fetch_all(pool)
+        .await?;
     Ok(records)
 }
 
