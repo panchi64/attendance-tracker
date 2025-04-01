@@ -3,10 +3,13 @@ use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::{App, HttpResponse, HttpServer, middleware::Logger, web};
 use dotenvy::dotenv;
+use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
-use std::io::Result;
+use std::io::Result as IoResult;
 use std::path::Path;
 use std::time::Duration;
+use uuid::Uuid;
+use anyhow::Result as AnyhowResult;
 
 mod api;
 mod config;
@@ -29,8 +32,113 @@ pub struct AppState {
     ws_server: actix::Addr<AttendanceServer>,
 }
 
+async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
+    log::info!("Checking for initial data seeding...");
+
+    // Check if any course exists
+    let course_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM courses")
+        .fetch_one(pool)
+        .await?;
+
+    if course_count == 0 {
+        log::info!("No courses found. Seeding default course...");
+        let default_id = Uuid::new_v4();
+        let default_name = "Default Course";
+        let default_sections = vec!["000".to_string(), "001".to_string()]; // Example sections
+        let sections_json = vec_string_to_json(&default_sections);
+
+        // Insert the default course
+        sqlx::query!(
+            r#"
+            INSERT INTO courses (id, name, section_number, sections, professor_name, office_hours, news, total_students, logo_path)
+            VALUES ($1, $2, '000', $3, 'Prof. John Doe', 'MWF: 10AM-12PM', 'Welcome!', 0, '/university-logo.png')
+            "#,
+            default_id,
+            default_name,
+            sections_json
+        )
+        .execute(pool)
+        .await?;
+
+        // Set this default course as the current one in preferences
+        let default_id_str = default_id.to_string();
+        sqlx::query!(
+            "INSERT OR REPLACE INTO preferences (key, value) VALUES ('current_course_id', $1)",
+            default_id_str
+        )
+        .execute(pool)
+        .await?;
+
+        log::info!("Default course seeded with ID: {}", default_id);
+    } else {
+        log::info!(
+            "Courses already exist (count: {}), skipping seeding.",
+            course_count
+        );
+        // Ensure current_course_id preference exists and is valid
+        let current_id_res = db::preferences::get_current_course_id(pool).await;
+        match current_id_res {
+            Ok(Some(id)) => {
+                // Verify it points to an actual course
+                if db::courses::fetch_course_by_id(pool, id).await.is_err() {
+                    log::warn!(
+                        "Current course ID {} in preferences does not exist in courses table. Resetting...",
+                        id
+                    );
+                    // Find the first available course and set it as current
+                    if let Ok(Some(first_course)) =
+                        sqlx::query_as::<_, crate::models::course::Course>(
+                            "SELECT * FROM courses LIMIT 1",
+                        )
+                        .fetch_optional(pool)
+                        .await
+                    {
+                        db::preferences::set_current_course_id(pool, first_course.id).await?;
+                        log::info!(
+                            "Reset current course ID to first available: {}",
+                            first_course.id
+                        );
+                    } else {
+                        log::error!(
+                            "Cannot reset current course ID: No courses found in table after check!"
+                        );
+                        // This state shouldn't happen if course_count > 0
+                    }
+                } else {
+                    log::debug!("Current course ID {} is valid.", id);
+                }
+            }
+            Ok(None) => {
+                log::warn!(
+                    "No current course ID set in preferences. Setting to first available..."
+                );
+                // Find the first available course and set it as current
+                if let Ok(Some(first_course)) = sqlx::query_as::<_, crate::models::course::Course>(
+                    "SELECT * FROM courses LIMIT 1",
+                )
+                .fetch_optional(pool)
+                .await
+                {
+                    db::preferences::set_current_course_id(pool, first_course.id).await?;
+                    log::info!(
+                        "Set current course ID to first available: {}",
+                        first_course.id
+                    );
+                } else {
+                    log::error!("Cannot set current course ID: No courses found in table!");
+                    // This state shouldn't happen if course_count > 0
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to get/validate current course ID preference: {}", e);
+            }
+        }
+    }
+    Ok(())
+}
+
 #[actix_web::main]
-async fn main() -> Result<()> {
+async fn main() -> IoResult<()> {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
@@ -46,8 +154,12 @@ async fn main() -> Result<()> {
         .expect("Failed to run database migrations");
     log::info!("Database migrations completed.");
 
-    // Create default course if none exists? Or handle frontend creating it.
-    // For now, we assume frontend handles course creation.
+    // --- Seed Initial Data ---
+    if let Err(e) = seed_initial_data(&pool).await {
+        log::error!("Failed to seed initial data: {}", e);
+        // Decide if you want to proceed or panic
+    }
+    // --- End Seeding ---
 
     // Start WebSocket Server Actor
     let ws_server = AttendanceServer::new(pool.clone()).start();
@@ -69,15 +181,20 @@ async fn main() -> Result<()> {
         log::error!(
             "Ensure the frontend is built ('npm run build' in web-ui) and FRONTEND_BUILD_PATH in .env is correct relative to the backend executable."
         );
-        // Optionally panic or exit here if frontend is critical
-        // return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Frontend build path not found"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Frontend build path not found",
+        ));
     } else if !frontend_path.join("index.html").exists() {
         log::error!(
             "index.html not found in frontend build path: {}",
             frontend_path.display()
         );
         log::error!("Ensure the Next.js export process completed correctly.");
-        // return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "index.html not found"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "index.html not found",
+        ));
     }
 
     let server_addr = format!("{}:{}", config.server_host, config.server_port);
