@@ -1,11 +1,11 @@
 use crate::{
+    AppState,
     db::{courses as course_db, preferences as pref_db},
-    errors::{AppError},
+    errors::AppError,
     models::course::{Course, CreateCoursePayload, UpdateCoursePayload, json_to_vec_string},
     models::preferences::SwitchCoursePayload,
-    AppState,
 };
-use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, delete, get, post, put, web};
 use chrono::NaiveDateTime;
 use serde::Serialize;
 use uuid::Uuid;
@@ -47,7 +47,6 @@ impl From<Course> for CourseApiResponse {
     }
 }
 
-
 #[post("/courses")]
 async fn create_course_handler(
     state: web::Data<AppState>,
@@ -58,8 +57,14 @@ async fn create_course_handler(
     log::info!("Successfully created course ID: {}", created_course.id);
 
     // If this is the *first* course created, maybe set it as current?
-    if pref_db::get_current_course_id(&state.db_pool).await?.is_none() {
-        log::info!("Setting newly created course {} as current.", created_course.id);
+    if pref_db::get_current_course_id(&state.db_pool)
+        .await?
+        .is_none()
+    {
+        log::info!(
+            "Setting newly created course {} as current.",
+            created_course.id
+        );
         pref_db::set_current_course_id(&state.db_pool, created_course.id).await?;
     }
 
@@ -78,7 +83,8 @@ async fn get_courses_handler(
     } else {
         log::debug!("Fetching all courses");
         let courses = course_db::fetch_all_courses(&state.db_pool).await?;
-        let response: Vec<CourseApiResponse> = courses.into_iter().map(CourseApiResponse::from).collect();
+        let response: Vec<CourseApiResponse> =
+            courses.into_iter().map(CourseApiResponse::from).collect();
         Ok(HttpResponse::Ok().json(response))
     }
 }
@@ -95,7 +101,6 @@ async fn get_course_by_id_handler(
     let course = course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
     Ok(HttpResponse::Ok().json(CourseApiResponse::from(course)))
 }
-
 
 #[put("/courses/{id}")]
 async fn update_course_handler(
@@ -126,7 +131,10 @@ async fn delete_course_handler(
         let all_courses = course_db::fetch_all_courses(&state.db_pool).await?;
         let next_course = all_courses.iter().find(|c| c.id != course_id);
         if let Some(next) = next_course {
-            log::info!("Deleted current course, switching to course ID: {}", next.id);
+            log::info!(
+                "Deleted current course, switching to course ID: {}",
+                next.id
+            );
             pref_db::set_current_course_id(&state.db_pool, next.id).await?;
         } else {
             log::info!("Deleted the only course, clearing current course preference.");
@@ -137,7 +145,11 @@ async fn delete_course_handler(
     }
 
     let affected_rows = course_db::delete_course(&state.db_pool, course_id).await?;
-    log::info!("Successfully deleted course ID: {} ({} rows affected)", course_id, affected_rows);
+    log::info!(
+        "Successfully deleted course ID: {} ({} rows affected)",
+        course_id,
+        affected_rows
+    );
     // Notify WebSocket clients?
     Ok(HttpResponse::NoContent().finish()) // 204 No Content is appropriate for DELETE
 }
@@ -148,7 +160,10 @@ async fn switch_course_handler(
     state: web::Data<AppState>,
     payload: web::Json<SwitchCoursePayload>,
 ) -> Result<impl Responder, AppError> {
-    log::info!("Attempting to switch current course to name: {}", payload.course_name);
+    log::info!(
+        "Attempting to switch current course to name: {}",
+        payload.course_name
+    );
     // Find the course ID by name
     let course = course_db::fetch_course_by_name(&state.db_pool, &payload.course_name).await?;
     // Update the preference
@@ -165,4 +180,34 @@ pub fn config_host_only(cfg: &mut web::ServiceConfig) {
         .service(update_course_handler)
         .service(delete_course_handler)
         .service(switch_course_handler);
+}
+
+// Public version of get_courses_handler without HostOnly middleware
+pub async fn get_courses_handler_public(
+    state: web::Data<AppState>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl Responder, AppError> {
+    // Reuse the same implementation as the admin version
+    if let Some(name) = query.get("name") {
+        log::debug!("Fetching course by name: {}", name);
+        let course = course_db::fetch_course_by_name(&state.db_pool, name).await?;
+        Ok(HttpResponse::Ok().json(vec![CourseApiResponse::from(course)]))
+    } else {
+        log::debug!("Fetching all courses");
+        let courses = course_db::fetch_all_courses(&state.db_pool).await?;
+        let response: Vec<CourseApiResponse> =
+            courses.into_iter().map(CourseApiResponse::from).collect();
+        Ok(HttpResponse::Ok().json(response))
+    }
+}
+
+// Public version of get_course_by_id_handler without HostOnly middleware
+pub async fn get_course_by_id_handler_public(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<impl Responder, AppError> {
+    let course_id = path.into_inner();
+    log::debug!("Fetching course by ID (public): {}", course_id);
+    let course = course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
+    Ok(HttpResponse::Ok().json(CourseApiResponse::from(course)))
 }

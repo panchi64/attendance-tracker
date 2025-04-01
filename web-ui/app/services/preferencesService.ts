@@ -125,7 +125,8 @@ export const loadPreferencesFromStorage = (): PreferencesStore => {
     } catch (e) {
         console.error("Failed to parse preferences from storage, using default:", e);
         try { localStorage.removeItem(STORAGE_KEY); } catch (error) {
-            console.log(error); }
+            console.log(error);
+        }
         return { ...defaultPreferences };
     }
 };
@@ -179,58 +180,131 @@ export const loadCurrentCourseIdFromBackend = async (): Promise<string | null> =
 
 /**
  * Load the full details of the current course based on the ID stored locally or fetched from backend.
+ * Enhanced with better fallback and error handling.
  */
 export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences> => {
     let currentId: string | null = null;
-    const localPrefs = loadPreferencesFromStorage(); // Load validated local state
+    const localPrefs = loadPreferencesFromStorage();
 
     // Determine the target ID: try local, then backend preference
     currentId = localPrefs.currentCourseId;
-    if (!currentId) {
-        currentId = await loadCurrentCourseIdFromBackend();
-        // If backend also has no preference, we'll hit the fallback later
-    }
 
-    // Try fetching the course details using the determined ID
+    // First attempt: Try to fetch with ID from local storage
     if (currentId) {
         try {
             console.log(`Fetching current course details for ID: ${currentId}`);
             const courseResponse = await fetch(`/api/courses/${currentId}`);
-            if (courseResponse.ok) { /* ... return transformed ... */ }
-            else if (courseResponse.status === 404) { /* ... handle 404, clear currentId ... */ }
-            else { /* Handle other errors, maybe clear currentId */ currentId = null; }
+
+            if (courseResponse.ok) {
+                const backendCourse = await courseResponse.json() as BackendCourse;
+                return transformBackendCourse(backendCourse);
+            } else if (courseResponse.status === 404) {
+                console.warn(`Course with ID ${currentId} not found, will try alternatives`);
+                currentId = null;
+            } else {
+                console.warn(`Error fetching course ${currentId}: ${courseResponse.status}`);
+                currentId = null;
+            }
         } catch (error) {
-            /* Handle network errors, maybe clear currentId */
+            console.error(`Network error fetching course ${currentId}:`, error);
             currentId = null;
-            console.log(error);
         }
     }
 
-    // --- Fallback Logic ---
+    // Second attempt: Try to get current ID from backend preferences
     if (!currentId) {
-        console.warn("Could not determine a valid current course ID. Attempting to load all courses...");
+        try {
+            console.log("Fetching current course ID from backend preferences");
+            currentId = await loadCurrentCourseIdFromBackend();
+
+            if (currentId) {
+                try {
+                    console.log(`Fetching course details for backend-provided ID: ${currentId}`);
+                    const courseResponse = await fetch(`/api/courses/${currentId}`);
+
+                    if (courseResponse.ok) {
+                        const backendCourse = await courseResponse.json() as BackendCourse;
+                        return transformBackendCourse(backendCourse);
+                    }
+                } catch (error) {
+                    console.error(`Error fetching course for backend ID ${currentId}:`, error);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching backend preferences:", error);
+        }
+    }
+
+    // Third attempt: Try loading all courses and use the first one
+    try {
+        console.log("Attempting to load all courses as fallback");
         const allCourses = await loadCoursesFromBackend();
+
         if (allCourses.length > 0) {
             const firstCourse = allCourses[0];
-            const newPrefs: PreferencesStore = { currentCourseId: firstCourse.id, courses: {} };
-            allCourses.forEach(c => { newPrefs.courses[c.courseName] = c; });
-            savePreferencesToStorage(newPrefs);
-            console.log(`Fallback successful: Set current course to ${firstCourse.courseName} (${firstCourse.id})`);
-            return firstCourse;
-        } else {
-            // THIS SHOULD NOT HAPPEN if backend seeding works!
-            console.error("CRITICAL: No courses found on backend and no valid current ID. Cannot proceed.");
-            // Return a dummy/error state or throw?
-            // Returning a dummy object to prevent immediate crash, but UI will be wrong.
-            return {
-                id: uuidv4(), courseName: "Error: No Courses", sectionNumber: "", sections: [],
-                professorName: "", officeHours: "", news: "Failed to load any course data.", totalStudents: 0, logoPath: ""
+            console.log(`Using first available course as fallback: ${firstCourse.courseName} (${firstCourse.id})`);
+
+            // Update local storage
+            const newPrefs: PreferencesStore = {
+                currentCourseId: firstCourse.id,
+                courses: {}
             };
+
+            allCourses.forEach(c => {
+                if (c.id) newPrefs.courses[c.courseName] = c;
+            });
+
+            savePreferencesToStorage(newPrefs);
+
+            // Also update backend preference to match
+            if (firstCourse.id) {
+                try {
+                    await fetch('/api/preferences', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ current_course_id: firstCourse.id }),
+                    });
+                } catch (error) {
+                    console.error("Failed to update backend preference:", error);
+                }
+            }
+
+            return firstCourse;
         }
+    } catch (error) {
+        console.error("Error loading all courses:", error);
     }
 
-    // This part should ideally be unreachable if the logic above is sound
-    throw new Error("Failed to load current course preferences through all fallbacks.");
+    // Final fallback: Create a new default course
+    console.warn("All attempts to load course failed, creating a new course");
+    try {
+        const newCourse = await createNewCourse("Default Course", {
+            professorName: "System Admin",
+            officeHours: "Please Configure",
+            news: "This course was created automatically because no valid courses were found.",
+            totalStudents: 25,
+            sections: ["000"],
+            sectionNumber: "000"
+        });
+
+        console.log("Successfully created emergency default course:", newCourse);
+        return newCourse;
+    } catch (createError) {
+        console.error("Failed to create emergency default course:", createError);
+
+        // Last resort: Return a dummy object
+        return {
+            id: null,
+            courseName: "Emergency Default",
+            sectionNumber: "000",
+            sections: ["000"],
+            professorName: "System Error",
+            officeHours: "Contact IT Support",
+            news: "Failed to load or create any courses. Please check the server logs or try restarting the application.",
+            totalStudents: 0,
+            logoPath: "/university-logo.png"
+        };
+    }
 };
 
 /**

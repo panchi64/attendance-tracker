@@ -2,6 +2,7 @@ use actix::Actor;
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::{App, HttpResponse, HttpServer, middleware::Logger, web};
+use anyhow::Result as AnyhowResult;
 use dotenvy::dotenv;
 use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
@@ -9,7 +10,6 @@ use std::io::Result as IoResult;
 use std::path::Path;
 use std::time::Duration;
 use uuid::Uuid;
-use anyhow::Result as AnyhowResult;
 
 mod api;
 mod config;
@@ -40,18 +40,20 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
         .fetch_one(pool)
         .await?;
 
+    let mut default_id = Uuid::nil(); // Set a default value
+
     if course_count == 0 {
         log::info!("No courses found. Seeding default course...");
-        let default_id = Uuid::new_v4();
+        default_id = Uuid::new_v4();
         let default_name = "Default Course";
-        let default_sections = vec!["000".to_string(), "001".to_string()]; // Example sections
+        let default_sections = vec!["000".to_string(), "001".to_string()];
         let sections_json = vec_string_to_json(&default_sections);
 
         // Insert the default course
         sqlx::query!(
             r#"
             INSERT INTO courses (id, name, section_number, sections, professor_name, office_hours, news, total_students, logo_path)
-            VALUES ($1, $2, '000', $3, 'Prof. John Doe', 'MWF: 10AM-12PM', 'Welcome!', 0, '/university-logo.png')
+            VALUES ($1, $2, '000', $3, 'Prof. John Doe', 'MWF: 10AM-12PM', 'Welcome!', 25, '/university-logo.png')
             "#,
             default_id,
             default_name,
@@ -60,7 +62,7 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
         .execute(pool)
         .await?;
 
-        // Set this default course as the current one in preferences
+        // Set this default course as the current one
         let default_id_str = default_id.to_string();
         sqlx::query!(
             "INSERT OR REPLACE INTO preferences (key, value) VALUES ('current_course_id', $1)",
@@ -69,64 +71,72 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
         .execute(pool)
         .await?;
 
-        log::info!("Default course seeded with ID: {}", default_id);
+        log::info!(
+            "Default course seeded with ID: {} ({})",
+            default_id,
+            default_name
+        );
     } else {
         log::info!(
-            "Courses already exist (count: {}), skipping seeding.",
+            "Courses already exist (count: {}), checking preferences...",
             course_count
         );
-        // Ensure current_course_id preference exists and is valid
+
+        // Check for a valid current_course_id preference
         let current_id_res = db::preferences::get_current_course_id(pool).await;
+
         match current_id_res {
             Ok(Some(id)) => {
-                // Verify it points to an actual course
-                if db::courses::fetch_course_by_id(pool, id).await.is_err() {
+                log::info!("Current course ID from preferences: {}", id);
+
+                // Verify the ID points to an actual course
+                let course_exists =
+                    sqlx::query_scalar!("SELECT COUNT(*) FROM courses WHERE id = ?", id)
+                        .fetch_one(pool)
+                        .await?;
+
+                if course_exists == 0 {
                     log::warn!(
                         "Current course ID {} in preferences does not exist in courses table. Resetting...",
                         id
                     );
-                    // Find the first available course and set it as current
-                    if let Ok(Some(first_course)) =
-                        sqlx::query_as::<_, crate::models::course::Course>(
-                            "SELECT * FROM courses LIMIT 1",
-                        )
-                        .fetch_optional(pool)
-                        .await
-                    {
-                        db::preferences::set_current_course_id(pool, first_course.id).await?;
-                        log::info!(
-                            "Reset current course ID to first available: {}",
-                            first_course.id
-                        );
+
+                    // Get the first available course
+                    let first_course_id: Option<Uuid> =
+                        sqlx::query_scalar!("SELECT id FROM courses LIMIT 1")
+                            .fetch_optional(pool)
+                            .await?
+                            .map(|id_str| Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::nil()));
+
+                    if let Some(first_id) = first_course_id {
+                        db::preferences::set_current_course_id(pool, first_id).await?;
+                        log::info!("Reset current course ID to first available: {}", first_id);
                     } else {
                         log::error!(
                             "Cannot reset current course ID: No courses found in table after check!"
                         );
-                        // This state shouldn't happen if course_count > 0
                     }
                 } else {
-                    log::debug!("Current course ID {} is valid.", id);
+                    log::info!("Current course ID {} is valid and exists in database", id);
                 }
             }
             Ok(None) => {
                 log::warn!(
                     "No current course ID set in preferences. Setting to first available..."
                 );
-                // Find the first available course and set it as current
-                if let Ok(Some(first_course)) = sqlx::query_as::<_, crate::models::course::Course>(
-                    "SELECT * FROM courses LIMIT 1",
-                )
-                .fetch_optional(pool)
-                .await
-                {
-                    db::preferences::set_current_course_id(pool, first_course.id).await?;
-                    log::info!(
-                        "Set current course ID to first available: {}",
-                        first_course.id
-                    );
+
+                // Find first available course
+                let first_course_id: Option<Uuid> =
+                    sqlx::query_scalar!("SELECT id FROM courses LIMIT 1")
+                        .fetch_optional(pool)
+                        .await?
+                        .map(|id_str| Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::nil()));
+
+                if let Some(first_id) = first_course_id {
+                    db::preferences::set_current_course_id(pool, first_id).await?;
+                    log::info!("Set current course ID to first available: {}", first_id);
                 } else {
                     log::error!("Cannot set current course ID: No courses found in table!");
-                    // This state shouldn't happen if course_count > 0
                 }
             }
             Err(e) => {
@@ -134,6 +144,44 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
             }
         }
     }
+
+    // Extra verification step - make sure we have a valid current course
+    let current_id = db::preferences::get_current_course_id(pool).await?;
+    log::info!("Current course ID after initialization: {:?}", current_id);
+
+    if current_id.is_none() {
+        log::warn!(
+            "Still no current course ID after initialization. Creating emergency default..."
+        );
+        let emergency_id = Uuid::new_v4();
+        let emergency_name = "Emergency Default Course";
+        let default_sections = vec!["000".to_string()];
+        let sections_json = vec_string_to_json(&default_sections);
+
+        // Insert emergency default course
+        sqlx::query!(
+            r#"
+            INSERT INTO courses (id, name, section_number, sections, professor_name, office_hours, news, total_students, logo_path)
+            VALUES ($1, $2, '000', $3, 'System Administrator', 'Contact IT Support', 'This course was created automatically after a system error.', 0, '/university-logo.png')
+            "#,
+            emergency_id,
+            emergency_name,
+            sections_json
+        )
+        .execute(pool)
+        .await?;
+
+        let emergency_id_str = emergency_id.to_string();
+        sqlx::query!(
+            "INSERT OR REPLACE INTO preferences (key, value) VALUES ('current_course_id', $1)",
+            emergency_id_str
+        )
+        .execute(pool)
+        .await?;
+
+        log::info!("Created emergency default course with ID: {}", emergency_id);
+    }
+
     Ok(())
 }
 
@@ -225,7 +273,7 @@ async fn main() -> IoResult<()> {
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allow_any_origin() // Consider restricting in production
+            .allow_any_origin()
             .allow_any_method()
             .allow_any_header()
             .supports_credentials()
@@ -240,36 +288,52 @@ async fn main() -> IoResult<()> {
             .wrap(cors)
             // --- Management API (Host Only) ---
             .service(
-                web::scope("/api")
+                web::scope("/api/admin")
                     .wrap(HostOnly)
                     .configure(api::courses::config_host_only)
                     .configure(api::preferences::config)
                     .configure(api::upload::config)
-                    .configure(api::export::config)
+                    .configure(api::export::config),
+            )
+            // --- WebSocket API (Host Only) ---
+            .service(
+                web::scope("/api/host")
+                    .wrap(HostOnly)
                     .configure(api::ws::config), // WebSocket connection setup
             )
             // --- Public API (Local Network Access) ---
             .service(
                 web::scope("/api")
                     .configure(api::attendance::config_public)
-                    .configure(api::qrcode::config_public),
+                    .configure(api::qrcode::config_public)
+                    // Add some endpoints that should be accessible but protected
+                    .service(
+                        web::resource("/courses")
+                            .route(web::get().to(api::courses::get_courses_handler_public)),
+                    )
+                    .service(
+                        web::resource("/courses/{id}")
+                            .route(web::get().to(api::courses::get_course_by_id_handler_public)),
+                    )
+                    .service(
+                        web::resource("/ws/{course_id}")
+                            .route(web::get().to(api::ws::ws_index_public)),
+                    ),
             )
             // --- Static File Serving ---
-            .service(Files::new("/uploads", "../public/uploads").show_files_listing()) // Serve uploaded logos etc.
+            .service(Files::new("/uploads", "../public/uploads").show_files_listing())
             .service(
                 Files::new("/", &config.frontend_build_path)
                     .index_file("index.html")
-                    .show_files_listing() // Optional: for debugging
+                    .show_files_listing()
                     .default_handler(move |req: actix_web::dev::ServiceRequest| {
-                        // SPA Fallback: Serve index.html for non-API, non-file routes
-                        let req_clone = req.request().clone(); // Clone the HttpRequest part
-                        let index_path_clone = index_path.clone(); // Clone before moving into async block
+                        let req_clone = req.request().clone();
+                        let index_path_clone = index_path.clone();
                         async move {
                             match actix_files::NamedFile::open(index_path_clone) {
-                                // Use the clone
                                 Ok(file) => {
-                                    let res = file.into_response(&req_clone); // Create response using cloned request
-                                    Ok(req.into_response(res)) // Turn original request into service response
+                                    let res = file.into_response(&req_clone);
+                                    Ok(req.into_response(res))
                                 }
                                 Err(e) => {
                                     log::error!(
@@ -278,7 +342,7 @@ async fn main() -> IoResult<()> {
                                     );
                                     Ok(req.into_response(
                                         HttpResponse::InternalServerError().finish(),
-                                    )) // Turn original req into ServiceResponse
+                                    ))
                                 }
                             }
                         }

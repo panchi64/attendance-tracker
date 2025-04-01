@@ -1,10 +1,9 @@
 use actix_web::{
+    Error, HttpResponse,
     body::{BoxBody, MessageBody},
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error,
-    HttpResponse,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
-use futures_util::future::{ok, FutureExt, LocalBoxFuture, Ready};
+use futures_util::future::{FutureExt, LocalBoxFuture, Ready, ok};
 use std::rc::Rc;
 
 pub struct HostOnly;
@@ -47,18 +46,20 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let is_local = req
-            .connection_info()
-            .realip_remote_addr().is_some_and(|ip_str| {
+        let connection_info = req.connection_info().clone();
+        let remote_addr = connection_info.realip_remote_addr();
+
+        // Check if connection is from localhost
+        let is_localhost = remote_addr.is_some_and(|ip_str| {
             ip_str == "127.0.0.1" || ip_str == "::1" || ip_str.starts_with("localhost")
         });
 
-        if is_local {
+        // Allow access from localhost
+        if is_localhost {
             let fut = self.service.call(req);
             async move {
-                // Map the successful response body B into BoxBody
                 let res: ServiceResponse<B> = fut.await?;
-                Ok(res.map_into_boxed_body()) // Map success body to BoxBody
+                Ok(res.map_into_boxed_body())
             }
             .boxed_local()
         } else {
@@ -67,13 +68,14 @@ where
                 req.peer_addr(),
                 req.connection_info().realip_remote_addr()
             );
-            // Error path: Create a ServiceResponse<BoxBody>
+
             let (http_req, _payload) = req.into_parts();
-            let response = HttpResponse::Forbidden()
-.json(serde_json::json!({"error": "forbidden", "message": "This resource is only accessible from the host machine."}));
+            let response = HttpResponse::Forbidden().json(serde_json::json!({
+                "error": "forbidden",
+                "message": "This administrative resource is only accessible from the host machine."
+            }));
 
-            let service_resp = ServiceResponse::new(http_req, response.map_into_boxed_body()); // Body is already BoxBody
-
+            let service_resp = ServiceResponse::new(http_req, response.map_into_boxed_body());
             async move { Ok(service_resp) }.boxed_local()
         }
     }
