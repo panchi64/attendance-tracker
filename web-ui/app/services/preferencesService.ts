@@ -381,25 +381,33 @@ export const getAvailableCourses = async (): Promise<Array<{ id: string, name: s
  */
 export const createNewCourse = async (courseName: string, initialPreferences?: Partial<Omit<CoursePreferences, 'id'>>): Promise<CoursePreferences> => {
     const prefs = loadPreferencesFromStorage();
-    // Check against existing names case-insensitively for better UX
-    const existingCourse = Object.values(prefs.courses).find(c => c.courseName.toLowerCase() === courseName.toLowerCase());
+
+    // Check against existing names
+    const existingCourse = Object.values(prefs.courses).find(c =>
+        c.courseName.toLowerCase() === courseName.toLowerCase()
+    );
+
     if (existingCourse) {
         throw new Error(`Course name "${courseName}" already exists (ID: ${existingCourse.id}).`);
     }
 
-    // Create new course object with id explicitly set to null
+    // Create new course with explicit default values instead of relying on defaultPreferences
     const newCourse: CoursePreferences = {
-        ...defaultPreferences.courses['Default Course'], // Start with defaults
-        ...(initialPreferences || {}), // Apply overrides provided
-        id: null, // <--- Explicitly null for creation
-        courseName: courseName.trim(), // Trim whitespace from name
-        logoPath: initialPreferences?.logoPath || defaultPreferences.courses['Default Course'].logoPath,
+        id: null,
+        courseName: courseName.trim(),
+        sectionNumber: "000",
+        sections: ["000"],
+        professorName: "Professor",
+        officeHours: "TBD",
+        news: "",
+        totalStudents: 0,
+        logoPath: "/university-logo.png", // Always use a valid path
+        ...(initialPreferences || {}) // Apply any overrides after defaults
     };
 
     console.log("Attempting to create new course:", newCourse);
 
     try {
-        // saveCoursePreferences handles the POST request because id is null
         const savedCourse = await saveCoursePreferences(newCourse);
         console.log("Successfully created new course:", savedCourse);
 
@@ -424,7 +432,6 @@ export const createNewCourse = async (courseName: string, initialPreferences?: P
         }
 
         return savedCourse;
-
     } catch (error) {
         console.error('Error creating course:', error instanceof Error ? error.message : String(error));
         // No need to clean up local storage here, as saveCoursePreferences wouldn't have added it on failure
