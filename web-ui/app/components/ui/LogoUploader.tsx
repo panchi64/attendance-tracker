@@ -6,12 +6,14 @@ interface LogoUploaderProps {
     isCustomizing: boolean;
     defaultLogoPath: string;
     onLogoChange?: (newLogoPath: string) => void;
+    courseId: string | null;
 }
 
 const LogoUploader = ({
     isCustomizing,
     defaultLogoPath = "/university-logo.png",
-    onLogoChange
+    onLogoChange,
+    courseId,
 }: LogoUploaderProps) => {
     const [logoPath, setLogoPath] = useState<string>(defaultLogoPath);
     const [isHovering, setIsHovering] = useState<boolean>(false);
@@ -21,6 +23,11 @@ const LogoUploader = ({
     // Handle file upload
     const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
+
+        if (!courseId) { // <--- Check if courseId is available
+            alert('Cannot upload logo: No course selected.');
+            return;
+        }
 
         if (file) {
             // Check if file is an image
@@ -45,10 +52,12 @@ const LogoUploader = ({
                 // Upload the file to the server
                 const formData = new FormData();
                 formData.append('logo', file);
+                formData.append('courseId', courseId);
 
                 const response = await fetch('/api/upload-logo', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: { 'X-Course-ID': courseId }
                 });
 
                 const data = await response.json();
@@ -78,6 +87,10 @@ const LogoUploader = ({
 
     // Trigger file input when edit button/overlay is clicked
     const handleLogoClick = () => {
+        if (!courseId && isCustomizing) { // <--- Prevent upload if no course ID
+            alert("Please select or save the course before changing the logo.");
+            return;
+        }
         if (isCustomizing && fileInputRef.current && !isUploading) {
             fileInputRef.current.click();
         }

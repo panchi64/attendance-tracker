@@ -13,8 +13,10 @@ import {
   getAvailableCourses,
   switchCourse,
   createNewCourse,
-  CoursePreferences
-} from './services/preferencesService';
+  deleteCourse,
+  CoursePreferences,
+  loadPreferencesFromStorage
+} from './services/preferencesService'; // Assuming path is correct
 
 // Types
 type EditorState = {
@@ -25,13 +27,19 @@ type EditorState = {
   totalStudents: boolean;
 };
 
-type CourseState = CoursePreferences & {
+type AvailableCourse = {
+  id: string;
+  name: string;
+};
+
+type CourseState = Omit<CoursePreferences, 'id'> & {
+  courseId: string | null;
   isLoading: boolean;
   isCustomizing: boolean;
   presentCount: number;
   confirmationCode: string;
   codeProgress: number;
-  availableCourses: string[];
+  availableCourses: AvailableCourse[];
   dropdowns: {
     section: boolean;
     course: boolean;
@@ -41,56 +49,63 @@ type CourseState = CoursePreferences & {
 };
 
 type CourseAction =
-  | { type: 'INITIALIZE_PREFERENCES'; payload: CoursePreferences; }
-  | { type: 'SET_AVAILABLE_COURSES'; payload: string[]; }
-  | { type: 'TOGGLE_CUSTOMIZING'; }
-  | { type: 'SET_COURSE_NAME'; payload: string; }
-  | { type: 'SET_SECTION_NUMBER'; payload: string; }
-  | { type: 'SET_SECTIONS'; payload: string[]; }
-  | { type: 'SET_PROFESSOR_NAME'; payload: string; }
-  | { type: 'SET_OFFICE_HOURS'; payload: string; }
-  | { type: 'SET_NEWS'; payload: string; }
-  | { type: 'SET_TOTAL_STUDENTS'; payload: number; }
-  | { type: 'SET_LOGO_PATH'; payload: string; }
-  | { type: 'SET_CONFIRMATION_CODE'; payload: string; }
-  | { type: 'SET_CODE_PROGRESS'; payload: number; }
-  | { type: 'SET_PRESENT_COUNT'; payload: number; }
-  | { type: 'TOGGLE_SECTION_DROPDOWN'; }
-  | { type: 'TOGGLE_COURSE_DROPDOWN'; }
-  | { type: 'CLOSE_ALL_DROPDOWNS'; }
-  | { type: 'TOGGLE_EDITOR'; payload: keyof EditorState; }
-  | { type: 'CLOSE_ALL_EDITORS'; }
-  | { type: 'SET_LOADING'; payload: boolean; }
-  | { type: 'SET_ERROR'; payload: string | null; };
+    | { type: 'INITIALIZE_PREFERENCES'; payload: CoursePreferences }
+    | { type: 'SET_COURSE_ID'; payload: string | null }
+    | { type: 'SET_AVAILABLE_COURSES'; payload: AvailableCourse[] }
+    | { type: 'TOGGLE_CUSTOMIZING' }
+    | { type: 'SET_COURSE_NAME'; payload: string }
+    | { type: 'SET_SECTION_NUMBER'; payload: string }
+    | { type: 'SET_SECTIONS'; payload: string[] }
+    | { type: 'SET_PROFESSOR_NAME'; payload: string }
+    | { type: 'SET_OFFICE_HOURS'; payload: string }
+    | { type: 'SET_NEWS'; payload: string }
+    | { type: 'SET_TOTAL_STUDENTS'; payload: number }
+    | { type: 'SET_LOGO_PATH'; payload: string }
+    | { type: 'SET_CONFIRMATION_CODE'; payload: string }
+    | { type: 'SET_CODE_PROGRESS'; payload: number }
+    | { type: 'SET_PRESENT_COUNT'; payload: number }
+    | { type: 'TOGGLE_SECTION_DROPDOWN' }
+    | { type: 'TOGGLE_COURSE_DROPDOWN' }
+    | { type: 'CLOSE_ALL_DROPDOWNS' }
+    | { type: 'TOGGLE_EDITOR'; payload: keyof EditorState }
+    | { type: 'CLOSE_ALL_EDITORS' }
+    | { type: 'SET_LOADING'; payload: boolean }
+    | { type: 'SET_ERROR'; payload: string | null };
 
-// Initial state
-const initialState: CourseState = {
-  courseName: "Course Name",
-  sectionNumber: "000",
-  sections: ["000", "001", "002"],
-  professorName: "Prof. John Doe",
-  officeHours: "MWF: 10AM-12PM",
-  news: "lorem ipsum dolor sit amet",
-  totalStudents: 64,
-  logoPath: "/university-logo.png",
-  isLoading: true,
-  isCustomizing: false,
-  presentCount: 0,
-  confirmationCode: "000000",
-  codeProgress: 100,
-  availableCourses: [],
-  dropdowns: {
-    section: false,
-    course: false,
-  },
-  editing: {
-    courseName: false,
-    professorName: false,
-    officeHours: false,
-    news: false,
-    totalStudents: false,
-  },
-  error: null
+// Initial state setup using preference service
+const getInitialState = (): CourseState => {
+  const initialPrefsStore = loadPreferencesFromStorage();
+  const initialCourse = initialPrefsStore.currentCourseId
+      ? Object.values(initialPrefsStore.courses).find(c => c.id === initialPrefsStore.currentCourseId)
+      ?? Object.values(initialPrefsStore.courses)[0]
+      : {
+        id: null, courseName: "Course Name", sectionNumber: "000", sections: ["000"],
+        professorName: "Prof. Doe", officeHours: "By Appt", news: "", totalStudents: 0, logoPath: "/university-logo.png"
+      };
+
+  return {
+    courseId: initialCourse?.id ?? null,
+    courseName: initialCourse?.courseName ?? "Course Name",
+    sectionNumber: initialCourse?.sectionNumber ?? "000",
+    sections: initialCourse?.sections ?? ["000"],
+    professorName: initialCourse?.professorName ?? "Prof. Doe",
+    officeHours: initialCourse?.officeHours ?? "By Appt",
+    news: initialCourse?.news ?? "",
+    totalStudents: initialCourse?.totalStudents ?? 0,
+    logoPath: initialCourse?.logoPath ?? "/university-logo.png",
+    isLoading: true,
+    isCustomizing: false,
+    presentCount: 0,
+    confirmationCode: "...",
+    codeProgress: 100,
+    availableCourses: [],
+    dropdowns: { section: false, course: false },
+    editing: {
+      courseName: false, professorName: false, officeHours: false,
+      news: false, totalStudents: false,
+    },
+    error: null
+  };
 };
 
 // Reducer function for state management
@@ -99,27 +114,47 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
     case 'INITIALIZE_PREFERENCES':
       return {
         ...state,
-        ...action.payload,
-        isLoading: false
+        courseId: action.payload.id,
+        courseName: action.payload.courseName,
+        sectionNumber: action.payload.sectionNumber,
+        sections: action.payload.sections,
+        professorName: action.payload.professorName,
+        officeHours: action.payload.officeHours,
+        news: action.payload.news,
+        totalStudents: action.payload.totalStudents,
+        logoPath: action.payload.logoPath,
+        isLoading: false,
+        error: null,
+        presentCount: 0,
+        confirmationCode: "...",
+        codeProgress: 100,
       };
+    case 'SET_COURSE_ID':
+      return { ...state, courseId: action.payload };
     case 'SET_AVAILABLE_COURSES':
-      return {
-        ...state,
-        availableCourses: action.payload
-      };
+      return { ...state, availableCourses: action.payload };
     case 'TOGGLE_CUSTOMIZING':
+      const nextIsCustomizing = !state.isCustomizing;
       return {
         ...state,
-        isCustomizing: !state.isCustomizing,
-        editing: initialState.editing, // Reset all editing states
-        dropdowns: initialState.dropdowns // Close all dropdowns
+        isCustomizing: nextIsCustomizing,
+        editing: nextIsCustomizing ? state.editing : getInitialState().editing,
+        dropdowns: getInitialState().dropdowns,
       };
     case 'SET_COURSE_NAME':
       return { ...state, courseName: action.payload };
     case 'SET_SECTION_NUMBER':
-      return { ...state, sectionNumber: action.payload };
+      const newSections = state.sections.includes(action.payload)
+          ? state.sections
+          : [...state.sections, action.payload].sort();
+      return { ...state, sectionNumber: action.payload, sections: newSections };
     case 'SET_SECTIONS':
-      return { ...state, sections: action.payload };
+      const currentSectionValid = action.payload.includes(state.sectionNumber);
+      return {
+        ...state,
+        sections: action.payload.sort(),
+        sectionNumber: currentSectionValid ? state.sectionNumber : (action.payload[0] || "000")
+      };
     case 'SET_PROFESSOR_NAME':
       return { ...state, professorName: action.payload };
     case 'SET_OFFICE_HOURS':
@@ -127,7 +162,8 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
     case 'SET_NEWS':
       return { ...state, news: action.payload };
     case 'SET_TOTAL_STUDENTS':
-      return { ...state, totalStudents: action.payload };
+      const total = Math.max(0, Number.isInteger(action.payload) ? action.payload : 0);
+      return { ...state, totalStudents: total };
     case 'SET_LOGO_PATH':
       return { ...state, logoPath: action.payload };
     case 'SET_CONFIRMATION_CODE':
@@ -137,719 +173,585 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
     case 'SET_PRESENT_COUNT':
       return { ...state, presentCount: action.payload };
     case 'TOGGLE_SECTION_DROPDOWN':
-      return {
-        ...state,
-        dropdowns: {
-          ...state.dropdowns,
-          section: !state.dropdowns.section,
-          course: false // Close other dropdown
-        }
-      };
+      return { ...state, dropdowns: { section: !state.dropdowns.section, course: false }};
     case 'TOGGLE_COURSE_DROPDOWN':
-      return {
-        ...state,
-        dropdowns: {
-          ...state.dropdowns,
-          course: !state.dropdowns.course,
-          section: false // Close other dropdown
-        }
-      };
+      return { ...state, dropdowns: { section: false, course: !state.dropdowns.course }};
     case 'CLOSE_ALL_DROPDOWNS':
-      return {
-        ...state,
-        dropdowns: initialState.dropdowns
-      };
+      return { ...state, dropdowns: { section: false, course: false }};
     case 'TOGGLE_EDITOR':
-      return {
-        ...state,
-        editing: {
-          ...initialState.editing, // First reset all
-          [action.payload]: !state.editing[action.payload]
-        }
-      };
+      return { ...state, editing: { ...getInitialState().editing, [action.payload]: !state.editing[action.payload] }};
     case 'CLOSE_ALL_EDITORS':
-      return {
-        ...state,
-        editing: initialState.editing
-      };
+      return { ...state, editing: getInitialState().editing };
     case 'SET_LOADING':
-      return {
-        ...state,
-        isLoading: action.payload
-      };
+      return { ...state, isLoading: action.payload };
     case 'SET_ERROR':
-      return {
-        ...state,
-        error: action.payload
-      };
+      return { ...state, error: action.payload, isLoading: false };
     default:
       return state;
   }
 }
 
-// Reusable WebSocket hook
+// Reusable WebSocket hook (No changes needed from previous version)
 function useAttendanceWebSocket(courseId: string | null, onMessage: (count: number) => void) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const wsErrorRef = useRef<string|null>(null);
 
   useEffect(() => {
-    if (!courseId) return;
-
+    wsErrorRef.current = null;
+    if (!courseId) {
+      wsRef.current?.close();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      setIsConnected(false);
+      return;
+    }
     let isMounted = true;
-
     const connectWebSocket = () => {
-      // Close existing connection if any
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.close();
-      }
-
-      // Clear any reconnect timeouts
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-
+      if (!isMounted) return;
+      wsRef.current?.close();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       wsRef.current = new WebSocket(`ws://${window.location.host}/api/ws/${courseId}`);
-
       wsRef.current.onopen = () => {
-        if (isMounted) {
-          console.log('WebSocket connected for course:', courseId);
-          setIsConnected(true);
-          setError(null);
-        }
+        if (!isMounted) return;
+        console.log('WS: WebSocket connected for course:', courseId);
+        setIsConnected(true);
+        wsErrorRef.current = null;
       };
-
       wsRef.current.onmessage = (event) => {
         if (!isMounted) return;
-
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'attendance_update') {
+          if (data.type === 'attendance_update' && typeof data.presentCount === 'number') {
             onMessage(data.presentCount);
           }
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
-        }
+        } catch (err) { console.error('WS: Error parsing WebSocket message:', err); }
       };
-
-      wsRef.current.onerror = (err) => {
-        if (isMounted) {
-          console.error('WebSocket error:', err);
-          setError('Connection error. Attempting to reconnect...');
-          setIsConnected(false);
-        }
+      wsRef.current.onerror = (event) => {
+        if (!isMounted) return;
+        console.error('WS: WebSocket error:', event);
+        wsErrorRef.current = 'Connection error.';
+        setIsConnected(false);
       };
-
-      wsRef.current.onclose = () => {
-        if (isMounted) {
-          console.log('WebSocket connection closed');
-          setIsConnected(false);
-
-          // Set up reconnection
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMounted) {
-              connectWebSocket();
-            }
-          }, 5000); // Reconnect after 5 seconds
-        }
+      wsRef.current.onclose = (event) => {
+        if (!isMounted) return;
+        console.log('WS: WebSocket connection closed.', event.reason);
+        setIsConnected(false);
+        const timeout = setTimeout(() => { if (isMounted) connectWebSocket(); }, 5000);
+        reconnectTimeoutRef.current = timeout;
       };
     };
-
     connectWebSocket();
-
-    // Cleanup function
     return () => {
       isMounted = false;
-
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if(wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      setIsConnected(false);
     };
   }, [courseId, onMessage]);
-
-  return { isConnected, error };
+  return { isConnected, error: wsErrorRef.current };
 }
 
-// Main Dashboard component
-export default function Dashboard() {
-  const [state, dispatch] = useReducer(courseReducer, initialState);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Refs for click outside handling and element focus
+// --- Main Dashboard Component ---
+export default function Dashboard() {
+  const [state, dispatch] = useReducer(courseReducer, getInitialState());
+  const [currentTime, setCurrentTime] = useState(new Date());
+  // State for the new course creation UI
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
+  const [newCourseNameInput, setNewCourseNameInput] = useState("");
+
+  // Refs
   const sectionDropdownRef = useRef<HTMLDivElement | null>(null);
   const courseDropdownRef = useRef<HTMLDivElement | null>(null);
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
-  const prevPrefsJsonRef = useRef<string>('');
+  const newCourseInputRef = useRef<HTMLInputElement | null>(null); // Ref for new course input focus
+  const prevSavedPrefsJsonRef = useRef<string>('');
 
-  // Create ref setter function
+  // Ref setter
   const setInputRef = (name: string) => (el: HTMLInputElement | HTMLTextAreaElement | null) => {
     inputRefs.current[name] = el;
   };
 
-  // For WebSocket connection
-  const courseIdRef = useRef<string | null>(null);
-
-  // Cached course IDs (in-memory cache)
-  const courseIdCacheRef = useRef<Record<string, string>>({});
-
-  // Memoized current course preferences
-  const currentCoursePrefs = useMemo(() => ({
-    courseName: state.courseName,
-    sectionNumber: state.sectionNumber,
-    sections: state.sections,
-    professorName: state.professorName,
-    officeHours: state.officeHours,
-    news: state.news,
-    totalStudents: state.totalStudents,
-    logoPath: state.logoPath
+  // Memoize the current state suitable for saving
+  const currentCoursePrefsForSave = useMemo((): CoursePreferences => ({
+    id: state.courseId, courseName: state.courseName, sectionNumber: state.sectionNumber,
+    sections: state.sections, professorName: state.professorName, officeHours: state.officeHours,
+    news: state.news, totalStudents: state.totalStudents, logoPath: state.logoPath
   }), [
-    state.courseName,
-    state.sectionNumber,
-    state.sections,
-    state.professorName,
-    state.officeHours,
-    state.news,
-    state.totalStudents,
-    state.logoPath
+    state.courseId, state.courseName, state.sectionNumber, state.sections,
+    state.professorName, state.officeHours, state.news, state.totalStudents, state.logoPath
   ]);
 
-  // Create a more specific debounce function for our use case
-  function createCourseSaveDebounce(
-    func: (prefs: CoursePreferences) => void | Promise<void>,
-    wait: number
-  ): (prefs: CoursePreferences) => void {
-    let timeout: ReturnType<typeof setTimeout> | null = null;
+  // --- Debounced Save Logic ---
 
-    return function (prefs: CoursePreferences) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function createDebounce<T extends (...args: any[]) => void>(func: T, wait: number): (...args: Parameters<T>) => void {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    return function executedFunction(...args: Parameters<T>) {
+      const later = () => { timeout = null; func(...args); };
       if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => func(prefs), wait);
+      timeout = setTimeout(later, wait);
     };
   }
-
-  // Create a debounced save function using our specific debounce
-  const debouncedSaveRef = useRef<((prefs: CoursePreferences) => void) | null>(null);
-
-  // Initialize the debounced function once
+  const performSave = useCallback(async (prefsToSave: CoursePreferences) => {
+    if (!prefsToSave.id) return; // Don't auto-save if ID is null
+    console.log("Debounce: Saving course preferences for ID:", prefsToSave.id);
+    // Optionally show subtle loading state? For now, just save.
+    try {
+      await saveCoursePreferences(prefsToSave);
+      prevSavedPrefsJsonRef.current = JSON.stringify(prefsToSave);
+      dispatch({ type: 'SET_ERROR', payload: null });
+    } catch (err) {
+      console.error("Debounce: Failed to save course:", err);
+      // Avoid setting loading state here to prevent interfering with explicit actions
+      dispatch({ type: 'SET_ERROR', payload: `Auto-save failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
+    }
+  }, []);
+  const debouncedSave = useMemo(() => createDebounce(performSave, 2500), [performSave]);
   useEffect(() => {
-    debouncedSaveRef.current = createCourseSaveDebounce((coursePrefs: CoursePreferences) => {
-      console.log("Saving course preferences (debounced):", coursePrefs.courseName);
-      saveCoursePreferences(coursePrefs)
-        .catch(err => {
-          console.error("Failed to save course:", err);
-          dispatch({ type: 'SET_ERROR', payload: 'Failed to save changes. Please try again.' });
-        });
-    }, 2000);
-  }, []);
+    if (state.isLoading || state.isCustomizing) return; // No auto-save during load or customize
+    const currentPrefsJson = JSON.stringify(currentCoursePrefsForSave);
+    if (currentPrefsJson !== prevSavedPrefsJsonRef.current) {
+      debouncedSave(currentCoursePrefsForSave);
+    }
+  }, [state.isLoading, state.isCustomizing, currentCoursePrefsForSave, debouncedSave]);
+  // --- End Debounced Save ---
 
-  // Create a stable callback that uses the ref
-  const debouncedSave = useCallback((prefs: CoursePreferences) => {
-    debouncedSaveRef.current?.(prefs);
-  }, []);
-
-  // WebSocket for real-time attendance updates
-  useAttendanceWebSocket(
-    courseIdRef.current,
-    useCallback((count: number) => {
-      dispatch({ type: 'SET_PRESENT_COUNT', payload: count });
-    }, [])
+  // --- WebSocket Hook ---
+  const { isConnected: isWsConnected, error: wsError } = useAttendanceWebSocket(
+      state.courseId, useCallback((count: number) => dispatch({ type: 'SET_PRESENT_COUNT', payload: count }), [])
   );
+  // --- End WebSocket ---
 
-  // Load initial data
+  // --- Initial Data Loading ---
   useEffect(() => {
+    let isMounted = true;
     async function loadInitialData() {
+      if (!isMounted) return;
+      dispatch({ type: 'SET_LOADING', payload: true });
       try {
-        dispatch({ type: 'SET_LOADING', payload: true });
-
-        // Load course preferences
         const currentPrefs = await loadCurrentCoursePreferences();
+        if (!isMounted) return;
         dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
+        prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs); // Initialize saved state ref
 
-        // Load available courses
         const courses = await getAvailableCourses();
+        if (!isMounted) return;
         dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
-
-        // Get course ID for WebSocket connection
-        if (currentPrefs.courseName) {
-          const response = await fetch(`/api/courses?name=${encodeURIComponent(currentPrefs.courseName)}`);
-          if (response.ok) {
-            const courses = await response.json();
-            if (courses && courses.length > 0) {
-              courseIdRef.current = courses[0].id;
-              courseIdCacheRef.current[currentPrefs.courseName] = courses[0].id;
-            }
-          }
-        }
       } catch (error) {
+        if (!isMounted) return;
         console.error('Error loading initial data:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to load data. Please refresh the page.' });
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
+        dispatch({ type: 'SET_ERROR', payload: 'Failed to load initial data.' });
+      } finally { if (isMounted) dispatch({ type: 'SET_LOADING', payload: false }); }
     }
-
     loadInitialData();
+    return () => { isMounted = false; };
   }, []);
+  // --- End Initial Data Loading ---
 
-  // Save preferences when they change
+  // --- Confirmation Code Placeholder ---
   useEffect(() => {
-    // Skip if we're still loading initial data
-    if (state.isLoading) return;
-
-    // Create a serialized version for change detection
-    const prefsJson = JSON.stringify(currentCoursePrefs);
-
-    // Only save if preferences have changed
-    if (prefsJson !== prevPrefsJsonRef.current) {
-      debouncedSave(currentCoursePrefs);
-      prevPrefsJsonRef.current = prefsJson;
-    }
-  }, [state.isLoading, currentCoursePrefs, debouncedSave]);
-
-  // Handle confirmation code generation
-  useEffect(() => {
-    // Generate initial code
-    const generateRandomCode = () => {
-      const newCode = Math.random().toString(36).substring(2, 8);
+    if (!state.courseId) {
+      dispatch({ type: 'SET_CONFIRMATION_CODE', payload: '------' });
+      dispatch({ type: 'SET_CODE_PROGRESS', payload: 0 });
+      return;
+    };
+    console.warn("Using client-side placeholder for confirmation code.");
+    let codeTimer: NodeJS.Timeout | null = null, progressTimer: NodeJS.Timeout | null = null;
+    let expiryTime = Date.now() + 5 * 60 * 1000;
+    const generateAndSetCode = () => {
+      const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      expiryTime = Date.now() + 5 * 60 * 1000;
       dispatch({ type: 'SET_CONFIRMATION_CODE', payload: newCode });
       dispatch({ type: 'SET_CODE_PROGRESS', payload: 100 });
     };
-
-    // Generate initial code
-    generateRandomCode();
-
-    // Set up timer to update code every 5 minutes
-    const codeInterval = setInterval(generateRandomCode, 5 * 60 * 1000);
-
-    // Update current time every second
-    const timeInterval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => {
-      clearInterval(codeInterval);
-      clearInterval(timeInterval);
+    const updateProgress = () => {
+      const remaining = Math.max(0, expiryTime - Date.now());
+      dispatch({ type: 'SET_CODE_PROGRESS', payload: (remaining / (5 * 60 * 1000)) * 100 });
+      if (remaining <= 0 && codeTimer) generateAndSetCode();
     };
-  }, []);
+    generateAndSetCode();
+    codeTimer = setInterval(generateAndSetCode, 5 * 60 * 1000);
+    progressTimer = setInterval(updateProgress, 1000);
+    return () => { if (codeTimer) clearInterval(codeTimer); if (progressTimer) clearInterval(progressTimer); };
+  }, [state.courseId]);
+  // --- End Confirmation Code Placeholder ---
 
-  // Handle progress bar separately to fix dependency issues
+  // --- Current Time Update ---
   useEffect(() => {
-    const progressInterval = setInterval(() => {
-      dispatch({
-        type: 'SET_CODE_PROGRESS',
-        payload: Math.max(0, state.codeProgress - (100 / (5 * 60)))
-      });
-    }, 1000);
+    const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timeInterval);
+  }, []);
+  // --- End Current Time Update ---
 
-    return () => {
-      clearInterval(progressInterval);
-    };
-  }, [state.codeProgress]);
-
-  // Handle clicks outside dropdowns
+  // --- Click Outside Dropdowns ---
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
+      const isOutsideSection = state.dropdowns.section && sectionDropdownRef.current && !sectionDropdownRef.current.contains(target);
+      const isOutsideCourse = state.dropdowns.course && courseDropdownRef.current && !courseDropdownRef.current.contains(target);
+      // Also close if clicking outside the new course input area
+      const isOutsideNewCourse = isCreatingCourse && newCourseInputRef.current && !newCourseInputRef.current.parentElement?.contains(target);
 
-      if (
-        state.dropdowns.section &&
-        sectionDropdownRef.current &&
-        !sectionDropdownRef.current.contains(target)
-      ) {
+      if (isOutsideSection || isOutsideCourse) {
         dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
       }
-
-      if (
-        state.dropdowns.course &&
-        courseDropdownRef.current &&
-        !courseDropdownRef.current.contains(target)
-      ) {
-        dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
+      // Cancel new course creation if clicking outside its area?
+      if (isOutsideNewCourse) {
+         handleCancelCreateCourse();
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [state.dropdowns.section, state.dropdowns.course]);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [state.dropdowns, isCreatingCourse]); // Add isCreatingCourse dependency
+  // --- End Click Outside ---
 
-  // Focus input when editing starts
-  useEffect(() => {
-    Object.entries(state.editing).forEach(([key, isEditing]) => {
-      if (isEditing && inputRefs.current[key]) {
-        inputRefs.current[key]?.focus();
+  // --- Focus Input Effects ---
+  useEffect(() => { // Focus inline editors when customizing
+    if (state.isCustomizing) {
+      const activeEditor = (Object.keys(state.editing) as Array<keyof EditorState>).find(key => state.editing[key]);
+      if (activeEditor && inputRefs.current[activeEditor]) {
+        inputRefs.current[activeEditor]?.focus();
+        if (inputRefs.current[activeEditor] instanceof HTMLInputElement) {
+          (inputRefs.current[activeEditor] as HTMLInputElement).select();
+        }
       }
-    });
-  }, [state.editing]);
+    }
+  }, [state.editing, state.isCustomizing]);
 
-  // Handler functions
+  useEffect(() => { // Focus new course input when isCreatingCourse becomes true
+    if (isCreatingCourse) {
+      newCourseInputRef.current?.focus();
+    }
+  }, [isCreatingCourse]);
+  // --- End Focus Input Effects ---
+
+  // --- Handler Functions ---
   const handleLogoChange = useCallback((newLogoPath: string) => {
     dispatch({ type: 'SET_LOGO_PATH', payload: newLogoPath });
   }, []);
 
   const addNewSection = useCallback(() => {
-    const newSection = window.prompt("Enter new section number:");
+    const newSection = window.prompt("Enter new section number (e.g., 003):")?.trim();
     if (newSection && !state.sections.includes(newSection)) {
-      dispatch({ type: 'SET_SECTIONS', payload: [...state.sections, newSection] });
+      const updatedSections = [...state.sections, newSection].sort();
+      dispatch({ type: 'SET_SECTIONS', payload: updatedSections });
       dispatch({ type: 'SET_SECTION_NUMBER', payload: newSection });
     }
     dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
   }, [state.sections]);
 
-  const handleSaveCourse = useCallback(async () => {
+  // Explicit Save/Update Button Handler
+  const handleSaveOrUpdateCourse = useCallback(async () => {
+    if (!state.courseName.trim()) {
+      dispatch({ type: 'SET_ERROR', payload: 'Course name cannot be empty.' });
+      return;
+    }
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      dispatch({ type: 'SET_ERROR', payload: null });
-
-      // If the course name has changed, create new course
-      if (state.courseName !== initialState.courseName) {
-        const newPrefs = await createNewCourse(state.courseName, currentCoursePrefs);
-        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: newPrefs });
-
+      const savedCourse = await saveCoursePreferences(currentCoursePrefsForSave);
+      dispatch({ type: 'INITIALIZE_PREFERENCES', payload: savedCourse });
+      prevSavedPrefsJsonRef.current = JSON.stringify(savedCourse); // Update saved ref
+      alert(`Course "${savedCourse.courseName}" ${currentCoursePrefsForSave.id ? 'updated' : 'saved'}.`);
+      if (!currentCoursePrefsForSave.id && savedCourse.id) { // If created
         const courses = await getAvailableCourses();
         dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
-
-        alert(`Course "${state.courseName}" has been saved.`);
-      } else {
-        // Just update existing course
-        await saveCoursePreferences(currentCoursePrefs);
-        alert(`Course "${state.courseName}" has been updated.`);
       }
+      dispatch({ type: 'TOGGLE_CUSTOMIZING' }); // Exit customize mode
     } catch (error) {
-      console.error('Error saving course:', error);
-      dispatch({
-        type: 'SET_ERROR',
-        payload: error instanceof Error ? error.message : 'Failed to save course'
-      });
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Failed to save course' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.courseName, currentCoursePrefs]);
+  }, [currentCoursePrefsForSave, state.courseName]); // Use memoized prefs
 
-  const handleSwitchCourse = useCallback(async (selectedCourse: string) => {
+  // Handle switching course - uses ID
+  const handleSwitchCourse = useCallback(async (selectedCourseId: string) => {
+    if (selectedCourseId === state.courseId || state.isLoading) return;
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      dispatch({ type: 'SET_ERROR', payload: null });
-      dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
-
-      const coursePrefs = await switchCourse(selectedCourse);
-
+      const coursePrefs = await switchCourse(selectedCourseId);
       if (coursePrefs) {
         dispatch({ type: 'INITIALIZE_PREFERENCES', payload: coursePrefs });
-        dispatch({ type: 'SET_PRESENT_COUNT', payload: 0 });
-
-        // Get course ID for WebSocket connection
-        const response = await fetch(`/api/courses?name=${encodeURIComponent(selectedCourse)}`);
-        if (response.ok) {
-          const courses = await response.json();
-          if (courses && courses.length > 0) {
-            courseIdRef.current = courses[0].id;
-            courseIdCacheRef.current[selectedCourse] = courses[0].id;
-          }
-        }
-      }
+        prevSavedPrefsJsonRef.current = JSON.stringify(coursePrefs); // Update saved ref
+      } else { throw new Error("Failed to load details for the selected course."); }
     } catch (error) {
       console.error('Error switching course:', error);
-      dispatch({
-        type: 'SET_ERROR',
-        payload: 'Failed to switch course. Please try again.'
-      });
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to switch course.' });
+      // Attempt to reload current state
+      try {
+        const lastGoodPrefs = await loadCurrentCoursePreferences();
+        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: lastGoodPrefs });
+        prevSavedPrefsJsonRef.current = JSON.stringify(lastGoodPrefs);
+      } catch (reloadError) { console.error("Failed reload after switch error:", reloadError); }
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, []);
+  }, [state.courseId, state.isLoading]);
 
-  // If still loading initial data, show loading indicator
-  if (state.isLoading) {
+  // --- New Course Creation Handlers ---
+  const handleInitiateCreateCourse = () => {
+    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
+    setNewCourseNameInput(""); // Clear previous input
+    setIsCreatingCourse(true); // Show the creation UI
+    // Optionally disable customize mode?
+    // if (state.isCustomizing) dispatch({ type: 'TOGGLE_CUSTOMIZING' });
+  };
+
+  const handleCancelCreateCourse = () => {
+    setIsCreatingCourse(false);
+    setNewCourseNameInput("");
+    dispatch({ type: 'SET_ERROR', payload: null }); // Clear any errors from create attempt
+  };
+
+  const handleConfirmCreateCourse = useCallback(async () => {
+    const trimmedName = newCourseNameInput.trim();
+    if (!trimmedName) {
+      dispatch({ type: 'SET_ERROR', payload: "New course name cannot be empty." });
+      newCourseInputRef.current?.focus();
+      return;
+    }
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    try {
+      const newCoursePrefs = await createNewCourse(trimmedName); // Service handles backend POST
+      dispatch({ type: 'INITIALIZE_PREFERENCES', payload: newCoursePrefs }); // Update UI state
+      prevSavedPrefsJsonRef.current = JSON.stringify(newCoursePrefs); // Update saved ref
+      const courses = await getAvailableCourses(); // Refresh list
+      dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+      alert(`Course "${newCoursePrefs.courseName}" created successfully.`);
+      setIsCreatingCourse(false); // Hide creation UI
+      setNewCourseNameInput(""); // Clear input
+    } catch (error) {
+      console.error('Error creating new course:', error);
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Failed to create.' });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [newCourseNameInput]);
+  // --- End New Course Creation Handlers ---
+
+  // Handle Deleting Current Course
+  const handleDeleteCurrentCourse = useCallback(async () => {
+    if (!state.courseId) return;
+    if (!window.confirm(`DELETE Course: "${state.courseName}"?\n\nThis is permanent and will remove all associated attendance data.`)) return;
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
+    try {
+      const success = await deleteCourse(state.courseId);
+      if (success) {
+        alert(`Course "${state.courseName}" deleted.`);
+        // Reload state to show the new current course
+        const currentPrefs = await loadCurrentCoursePreferences();
+        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
+        prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs);
+        const courses = await getAvailableCourses();
+        dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+      } else { throw new Error("Deletion request failed."); }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Failed to delete.' });
+      // Attempt reload even on error
+      try {
+        const currentPrefs = await loadCurrentCoursePreferences();
+        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
+        prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs);
+      } catch (_reloadError) { console.error("Failed reload after delete error:", _reloadError); }
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [state.courseId, state.courseName]);
+  // --- End Handler Functions ---
+
+  // --- Loading Indicator ---
+  if (state.isLoading && !prevSavedPrefsJsonRef.current) { // Show only on initial load
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-          <p className="text-gray-500 mt-4">Loading course data...</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+            <p className="text-gray-500 mt-4">Loading attendance tracker data...</p>
+          </div>
         </div>
-      </div>
     );
   }
+  // --- End Loading Indicator ---
 
-  // Compute QR code URL
-  const qrCodeUrl = `/api/qrcode/${state.courseName || 'default'}`;
+  // Compute QR code URL using courseId
+  const qrCodeUrl = state.courseId ? `/api/qrcode/${state.courseId}` : '/placeholder-qr.png';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
-        {/* Display error message if there is one */}
-        {state.error && (
-          <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 m-4 rounded">
-            <p className="font-bold">Error</p>
-            <p>{state.error}</p>
-            <button
-              className="text-red-700 underline mt-1"
-              onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-300 bg-white">
-          <div className="flex items-center">
-            {/* Logo uploader */}
-            <LogoUploader
-              isCustomizing={state.isCustomizing}
-              defaultLogoPath={state.logoPath}
-              onLogoChange={handleLogoChange}
-            />
-
-            <div className="ml-6">
-              {state.editing.officeHours && state.isCustomizing ? (
-                <div>
-                  <div className="text-gray-700 text-2xl font-semibold">Office Hours</div>
-                  <input
-                    ref={setInputRef('officeHours')}
-                    type="text"
-                    value={state.officeHours}
-                    onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })}
-                    onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })}
-                    className="text-3xl text-gray-800 font-medium mt-1 border-b border-gray-300 focus:outline-none focus:border-gray-500 bg-transparent w-full"
-                  />
-                </div>
-              ) : (
-                <div
-                  onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })}
-                  className={state.isCustomizing ? "cursor-pointer" : ""}
-                >
-                  <div className="text-gray-700 text-2xl font-semibold flex items-center">
-                    Office Hours
-                    {state.isCustomizing && !state.editing.officeHours && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
-                  </div>
-                  <div className="text-3xl text-gray-800 font-medium mt-1">{state.officeHours}</div>
-                </div>
-              )}
-            </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
+          {/* WebSocket Status Indicator */}
+          <div className={`text-xs px-2 py-0.5 text-white text-center ${isWsConnected ? 'bg-green-500' : 'bg-red-500'}`}>
+            {isWsConnected ? 'Real-time connection active' : (wsError || 'Real-time connection inactive')}
           </div>
 
-          <div className="text-right">
-            <div className="flex items-center">
-              {state.editing.courseName && state.isCustomizing ? (
-                <input
-                  ref={setInputRef('courseName')}
-                  type="text"
-                  value={state.courseName}
-                  onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })}
-                  onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}
-                  className="text-4xl font-bold text-gray-900 border-b border-gray-300 focus:outline-none focus:border-gray-500 bg-transparent w-auto"
-                />
-              ) : (
-                <div
-                  className={`text-4xl font-bold text-gray-900 flex items-center ${state.isCustomizing ? "cursor-pointer" : ""}`}
-                  onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}
-                >
-                  {state.isCustomizing && !state.editing.courseName && <Pencil className="mr-2 text-blue-500 w-5 h-5" />}
-                  {state.courseName}
-                </div>
-              )}
+          {/* Error Display */}
+          {state.error && (
+              <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
+                <strong className="font-bold block">Error!</strong>
+                <span className="block sm:inline">{state.error}</span>
+                <button onClick={() => dispatch({ type: 'SET_ERROR', payload: null })} className="absolute top-0 bottom-0 right-0 px-4 py-3 text-red-500 hover:text-red-800" aria-label="Dismiss error">×</button>
+              </div>
+          )}
 
-              <span className="text-4xl font-bold mx-2 text-gray-900">-</span>
-
-              <div className="relative" ref={sectionDropdownRef}>
-                <div
-                  className="text-4xl font-bold text-gray-900 cursor-pointer flex items-center"
-                  onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_SECTION_DROPDOWN' })}
-                >
-                  {state.sectionNumber}
-                  {state.isCustomizing && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
-                </div>
-
-                {/* Section dropdown - only accessible in customize mode */}
-                {state.dropdowns.section && state.isCustomizing && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
-                    <ul className="py-1">
-                      {state.sections.map((section) => (
-                        <li key={section}>
-                          <button
-                            className={`block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left ${section === state.sectionNumber ? 'bg-gray-100 font-medium' : ''}`}
-                            onClick={() => {
-                              dispatch({ type: 'SET_SECTION_NUMBER', payload: section });
-                              dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
-                            }}
-                          >
-                            {section}
-                          </button>
-                        </li>
-                      ))}
-                      <li className="border-t border-gray-200">
-                        <button
-                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left"
-                          onClick={addNewSection}
-                        >
-                          + Add new section
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
+          {/* --- Header --- */}
+          <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
+            {/* Left Side: Logo & Office Hours */}
+            <div className="flex items-center gap-6 w-full sm:w-auto">
+              <LogoUploader isCustomizing={state.isCustomizing} defaultLogoPath={state.logoPath} onLogoChange={handleLogoChange} courseId={state.courseId} />
+              <div className="flex-grow">
+                {state.isCustomizing && state.editing.officeHours ? (
+                    <div>
+                      <label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</label>
+                      <input id="officeHoursInput" ref={setInputRef('officeHours')} type="text" value={state.officeHours} onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className="text-lg sm:text-xl font-medium text-gray-800 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" />
+                    </div>
+                ) : (
+                    <div onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })} className={`${state.isCustomizing ? "cursor-pointer group" : ""}`}>
+                      <div className="text-sm font-medium text-gray-500 flex items-center">Office Hours {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
+                      <div className="text-lg sm:text-xl font-medium text-gray-800 mt-0.5">{state.officeHours || "-"}</div>
+                    </div>
                 )}
               </div>
             </div>
 
-            {state.editing.professorName && state.isCustomizing ? (
-              <input
-                ref={setInputRef('professorName')}
-                type="text"
-                value={state.professorName}
-                onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })}
-                onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}
-                className="text-2xl text-right mt-2 text-gray-700 border-b border-gray-300 focus:outline-none focus:border-gray-500 bg-transparent w-full"
-              />
-            ) : (
-              <div
-                className={`text-2xl text-right mt-2 text-gray-700 flex items-center justify-end ${state.isCustomizing ? "cursor-pointer" : ""}`}
-                onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}
-              >
-                {state.isCustomizing && !state.editing.professorName && <Pencil className="mr-2 text-blue-500 w-5 h-5" />}
-                {state.professorName}
+            {/* Right Side: Course Name, Section, Professor */}
+            <div className="text-right w-full sm:w-auto">
+              <div className="flex items-center justify-end">
+                {state.isCustomizing && state.editing.courseName ? (
+                    <input ref={setInputRef('courseName')} type="text" value={state.courseName} onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })} className="text-2xl sm:text-3xl font-bold text-gray-900 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent text-right" placeholder="Course Name" />
+                ) : (
+                    <div className={`text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.courseName}</div>
+                )}
+                <span className="text-2xl sm:text-3xl font-bold mx-2 text-gray-500">-</span>
+                <div className="relative" ref={sectionDropdownRef}>
+                  <button className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_SECTION_DROPDOWN' })} disabled={!state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.section}> {state.sectionNumber} {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</button>
+                  {state.dropdowns.section && state.isCustomizing && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-60 overflow-y-auto">
+                        {state.sections.map((section) => ( <li key={section}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${section === state.sectionNumber ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => { dispatch({ type: 'SET_SECTION_NUMBER', payload: section }); dispatch({ type: 'CLOSE_ALL_DROPDOWNS' }); }}>{section}</button></li> ))}
+                        <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={addNewSection}>+ Add new section</button></li>
+                      </ul></div>
+                  )}
+                </div>
               </div>
+              <div className="mt-1.5">
+                {state.isCustomizing && state.editing.professorName ? (
+                    <input ref={setInputRef('professorName')} type="text" value={state.professorName} onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })} className="text-base sm:text-lg text-right text-gray-600 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full" placeholder="Professor Name" />
+                ) : (
+                    <div className={`text-base sm:text-lg text-right text-gray-600 flex items-center justify-end group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}> {state.isCustomizing && <Pencil className="mr-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />} {state.professorName}</div>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* --- End Header --- */}
+
+          {/* --- Main Content --- */}
+          <div className="flex flex-col md:flex-row bg-white">
+            {/* Left Side: Attendance Count & News */}
+            <div className="w-full md:w-2/3 p-6 md:p-8">
+              <div className="flex items-baseline mb-6">
+                <span className="text-5xl sm:text-6xl font-bold text-gray-900">Present:</span>
+                <span className="text-5xl sm:text-6xl font-bold text-gray-900 ml-3">{state.presentCount}</span>
+                {state.isCustomizing && state.editing.totalStudents ? (
+                    <div className="flex items-baseline ml-2"><span className="text-2xl sm:text-3xl text-gray-400 font-medium">/</span><input ref={setInputRef('totalStudents')} type="number" min="0" value={state.totalStudents} onChange={(e) => dispatch({ type: 'SET_TOTAL_STUDENTS', payload: parseInt(e.target.value, 10) || 0 })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })} className="text-2xl sm:text-3xl text-gray-400 font-medium w-16 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 text-center ml-1" /></div>
+                ) : (
+                    <div className={`flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })}><span className="text-2xl sm:text-3xl text-gray-400 ml-2 font-medium">/{state.totalStudents}</span> {state.isCustomizing && <Pencil className="ml-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />}</div>
+                )}
+              </div>
+              <div className="border-t border-gray-300 pt-6">
+                <h2 className="text-xl sm:text-2xl font-bold mb-3 text-gray-800">News / Comments</h2>
+                {state.isCustomizing && state.editing.news ? (
+                    <textarea ref={setInputRef('news')} className="w-full h-40 border border-gray-300 p-3 rounded-md text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base sm:text-lg whitespace-pre-wrap font-sans resize-y" value={state.news} onChange={(e) => dispatch({ type: 'SET_NEWS', payload: e.target.value })} onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })} placeholder="Enter any news or comments for the class..." />
+                ) : (
+                    <div className={`text-base sm:text-lg text-gray-700 p-3 rounded-md min-h-[6rem] whitespace-pre-wrap group relative ${state.isCustomizing ? "cursor-pointer hover:bg-gray-50" : ""}`} onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}>{state.news || <span className="text-gray-400 italic">No news or comments entered.</span>} {state.isCustomizing && ( <Pencil className="absolute top-2 right-2 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" /> )}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Side: QR Code & Confirmation */}
+            <div className="w-full md:w-1/3 p-6 md:p-8 border-t md:border-t-0 md:border-l border-gray-300 flex flex-col items-center justify-between bg-gray-50">
+              <div className="w-full max-w-[250px] aspect-square relative p-4 bg-white rounded-lg shadow-sm mb-6">
+                {state.courseId ? (<Image src={qrCodeUrl} alt="QR Code for Attendance" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain" priority />) : (<div className="flex items-center justify-center h-full text-gray-400 text-center text-sm p-4">Select or create a course to generate QR code.</div>)}
+              </div>
+              <div className="w-full text-center">
+                <div className="text-lg sm:text-xl text-gray-700 font-medium">Confirmation Code</div>
+                <div className={`text-6xl sm:text-7xl font-bold text-gray-900 mt-2 tracking-widest ${state.confirmationCode === '...' ? 'animate-pulse text-gray-300' : ''}`}>{state.confirmationCode}</div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4 overflow-hidden"> <div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000 ease-linear" style={{ width: `${state.codeProgress}%` }}></div> </div>
+                <p className="text-xs text-gray-500 mt-1">Code refreshes periodically.</p>
+              </div>
+            </div>
+          </div>
+          {/* --- End Main Content --- */}
+
+          {/* --- Footer --- */}
+          <div className="flex flex-col sm:flex-row justify-between items-center p-4 sm:p-6 border-t border-gray-300 bg-gray-50 gap-3">
+            {/* Left Side: Date/Time */}
+            <div className="text-sm sm:text-base font-medium text-gray-500 text-center sm:text-left">
+              <div>{format(currentTime, "EEEE, MMMM do yyyy")}</div>
+              <div>{format(currentTime, "h:mm:ss a")}</div>
+            </div>
+
+            {/* Right Side: Action Buttons / Create Course Form */}
+            {isCreatingCourse ? (
+                // --- Create Course Input Form ---
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
+                  <input
+                      ref={newCourseInputRef}
+                      type="text"
+                      placeholder="New Course Name..."
+                      value={newCourseNameInput}
+                      onChange={(e) => setNewCourseNameInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleConfirmCreateCourse()}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                      disabled={state.isLoading}
+                  />
+                  <button
+                      onClick={handleConfirmCreateCourse}
+                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+                      disabled={state.isLoading || !newCourseNameInput.trim()}
+                  >
+                    {state.isLoading ? "Creating..." : "Create"}
+                  </button>
+                  <button
+                      onClick={handleCancelCreateCourse}
+                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+                      disabled={state.isLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                // --- End Create Course Input Form ---
+            ) : (
+                // --- Standard Footer Buttons ---
+                <div className="flex flex-wrap gap-2 sm:gap-3 relative justify-center sm:justify-end">
+                  {state.isCustomizing && state.courseId && (
+                      <button title="Delete Current Course" className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs sm:text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleDeleteCurrentCourse} disabled={state.isLoading}> Delete Course </button>
+                  )}
+                  {state.isCustomizing ? (
+                      <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={handleSaveOrUpdateCourse} disabled={state.isLoading || !state.courseName.trim()}> {state.isLoading ? "Saving..." : "Save Changes"} </button>
+                  ) : ( <button className="px-4 py-2 bg-gray-200 text-gray-400 rounded-md text-sm shadow-sm cursor-not-allowed" disabled={true}> Save Changes </button> )}
+                  <div className="relative" ref={courseDropdownRef}>
+                    <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50" onClick={() => dispatch({ type: 'TOGGLE_COURSE_DROPDOWN' })} disabled={state.isLoading || state.isCustomizing} aria-haspopup="true" aria-expanded={state.dropdowns.course}> Switch Course </button>
+                    {state.dropdowns.course && (
+                        <div className="absolute right-0 bottom-full mb-2 w-56 bg-white rounded-md shadow-lg z-20 border border-gray-200"><ul className="py-1 max-h-64 overflow-y-auto">
+                          {state.availableCourses.map((course) => ( <li key={course.id}><button className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${course.id === state.courseId ? 'bg-gray-100 font-semibold' : ''}`} onClick={() => handleSwitchCourse(course.id)} disabled={course.id === state.courseId}>{course.name}</button></li> ))}
+                          <li className="border-t border-gray-200 mt-1 pt-1"><button className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50" onClick={handleInitiateCreateCourse} disabled={state.isLoading || state.isCustomizing}>+ Create New Course</button></li>
+                        </ul></div>
+                    )}
+                  </div>
+                  <button className={`px-4 py-2 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50 ${ state.isCustomizing ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900' }`} onClick={() => { if (state.isCustomizing) { handleSaveOrUpdateCourse(); } else { dispatch({ type: 'TOGGLE_CUSTOMIZING' }); } }} disabled={state.isLoading}> {state.isCustomizing ? 'Done & Save' : 'Customize'} </button>
+                </div>
+                // --- End Standard Footer Buttons ---
             )}
           </div>
-        </div>
+          {/* --- End Footer --- */}
 
-        {/* Main content */}
-        <div className="flex bg-white">
-          {/* Left side - Attendance info */}
-          <div className="w-2/3 p-8">
-            <div className="flex items-baseline mb-8">
-              <h1 className="text-6xl font-bold text-gray-900">Present - </h1>
-              <h1 className="text-6xl font-bold text-gray-900 ml-2">{state.presentCount}</h1>
-
-              {state.editing.totalStudents && state.isCustomizing ? (
-                <div className="flex items-baseline">
-                  <span className="text-3xl text-gray-400 ml-2 font-medium">/</span>
-                  <input
-                    ref={setInputRef('totalStudents')}
-                    type="number"
-                    value={state.totalStudents}
-                    onChange={(e) => dispatch({ type: 'SET_TOTAL_STUDENTS', payload: parseInt(e.target.value) || 0 })}
-                    onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })}
-                    className="text-3xl text-gray-400 font-medium w-16 bg-transparent border-b border-gray-300 focus:outline-none focus:border-gray-500"
-                  />
-                </div>
-              ) : (
-                <div
-                  className={`flex items-center ${state.isCustomizing ? "cursor-pointer" : ""}`}
-                  onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'totalStudents' })}
-                >
-                  <span className="text-3xl text-gray-400 ml-2 font-medium">/{state.totalStudents}</span>
-                  {state.isCustomizing && !state.editing.totalStudents && <Pencil className="ml-2 text-blue-500 w-5 h-5" />}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-gray-300 pt-6">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">News / Comments</h2>
-              {state.editing.news ? (
-                <textarea
-                  ref={setInputRef('news')}
-                  className="w-full h-40 border border-gray-300 p-4 rounded-md text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg whitespace-pre-wrap font-sans"
-                  value={state.news}
-                  onChange={(e) => dispatch({ type: 'SET_NEWS', payload: e.target.value })}
-                  onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}
-                />
-              ) : (
-                <div
-                  className={`text-2xl cursor-pointer text-gray-800 p-4 rounded-md hover:bg-gray-50 transition-colors whitespace-pre-wrap flex ${state.isCustomizing ? "cursor-pointer" : ""}`}
-                  onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}
-                >
-                  <span>{state.news}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right side - QR and confirmation */}
-          <div className="w-1/3 p-8 border-l border-gray-300 flex flex-col items-center justify-between bg-gray-50">
-            <div className="w-full aspect-square relative p-4 bg-white rounded-lg shadow-sm">
-              <Image
-                src={qrCodeUrl}
-                alt="QR Code"
-                layout="fill"
-                className="object-contain"
-              />
-            </div>
-
-            <div className="w-full mt-6">
-              <div className="text-center text-xl text-gray-700 font-medium">Confirmation Code</div>
-              <div className="text-center text-7xl font-bold text-gray-900 mt-2">{state.confirmationCode}</div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
-                <div
-                  className="bg-blue-400 h-2 rounded-full transition-all duration-75 ease-linear"
-                  style={{ width: `${state.codeProgress}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-between items-center p-6 border-t border-gray-300 bg-gray-50">
-          <div className="text-xl font-medium text-gray-400">
-            {format(currentTime, "EEEE, MMMM do yyyy")}
-          </div>
-          <div className="text-xl font-medium text-gray-400 w-40 text-center">
-            {format(currentTime, "h:mm:ss a")}
-          </div>
-          <div className="flex gap-3 relative">
-            <button
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={handleSaveCourse}
-              disabled={state.isLoading}
-            >
-              {state.isLoading ? "Saving..." : "Save Course"}
-            </button>
-
-            {/* Course switcher dropdown */}
-            <div className="relative" ref={courseDropdownRef}>
-              <button
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => dispatch({ type: 'TOGGLE_COURSE_DROPDOWN' })}
-                disabled={state.isLoading}
-              >
-                Switch Course
-              </button>
-
-              {state.dropdowns.course && (
-                <div className="absolute right-0 bottom-12 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
-                  <ul className="py-1 max-h-64 overflow-y-auto">
-                    {state.availableCourses.map((course) => (
-                      <li key={course}>
-                        <button
-                          className={`block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left ${course === state.courseName ? 'bg-gray-100 font-medium' : ''}`}
-                          onClick={() => handleSwitchCourse(course)}
-                        >
-                          {course}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            <button
-              className={`px-4 py-2 ${state.isCustomizing ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-md text-sm shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
-              onClick={() => dispatch({ type: 'TOGGLE_CUSTOMIZING' })}
-              disabled={state.isLoading}
-            >
-              {state.isCustomizing ? 'Done' : 'Customize'}
-            </button>
-          </div>
         </div>
       </div>
-    </div>
   );
 }

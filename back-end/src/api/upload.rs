@@ -1,10 +1,10 @@
 use actix_multipart::Multipart;
-use actix_web::{post, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, post, web};
 use futures_util::TryStreamExt;
 use std::{fs, io::Write};
 use uuid::Uuid;
 
-use crate::{errors::AppError, AppState};
+use crate::{AppState, errors::AppError};
 
 // Basic stub - Needs improvement (error handling, file naming, path validation)
 #[post("/upload-logo")]
@@ -14,7 +14,7 @@ async fn upload_logo_handler(
 ) -> Result<impl Responder, AppError> {
     log::info!("Receiving logo upload request");
 
-    let uploads_dir = "./uploads/logos";
+    let uploads_dir = "../public/uploads/logos";
     fs::create_dir_all(uploads_dir)?; // Ensure the directory exists
 
     let mut _file_path_on_server: Option<String> = None;
@@ -47,7 +47,10 @@ async fn upload_logo_handler(
                 while let Some(chunk) = field.try_next().await? {
                     f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
                 }
-                log::info!("Successfully saved uploaded file to: {}", _file_path_on_server.as_ref().unwrap());
+                log::info!(
+                    "Successfully saved uploaded file to: {}",
+                    _file_path_on_server.as_ref().unwrap()
+                );
                 break; // Assuming only one logo file
             }
         }
@@ -62,14 +65,16 @@ async fn upload_logo_handler(
         // let current_course_id = pref_db::get_current_course_id(&state.db_pool).await?
         //     .ok_or(AppError::BadClientData("No current course selected to associate logo with".to_string()))?;
         // course_db::update_logo_path(&state.db_pool, current_course_id, &url_path).await?;
-        log::warn!("Logo upload successful, URL path is '{}'. DB update not yet implemented.", url_path);
-
+        log::warn!(
+            "Logo upload successful, URL path is '{}'. DB update not yet implemented.",
+            url_path
+        );
 
         Ok(HttpResponse::Ok().json(serde_json::json!({
-             "success": true,
-             "message": "Logo uploaded successfully",
-             "logoPath": url_path // Return the relative URL path
-         })))
+            "success": true,
+            "message": "Logo uploaded successfully",
+            "logoPath": url_path // Return the relative URL path
+        })))
     } else {
         log::error!("Logo upload failed: 'logo' field not found in multipart data.");
         Err(AppError::BadClientData(

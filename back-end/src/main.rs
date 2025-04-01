@@ -1,7 +1,7 @@
 use actix::Actor;
 use actix_cors::Cors;
 use actix_files::Files;
-use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use actix_web::{App, HttpResponse, HttpServer, middleware::Logger, web};
 use dotenvy::dotenv;
 use sqlx::SqlitePool;
 use std::io::Result;
@@ -12,11 +12,10 @@ mod api;
 mod config;
 mod db;
 mod errors;
+mod middleware;
 mod models;
 mod services;
 mod utils;
-mod middleware;
-
 
 use config::Config;
 use db::database::create_db_pool;
@@ -67,21 +66,26 @@ async fn main() -> Result<()> {
             "Frontend build path does not exist: {}",
             frontend_path.display()
         );
-        log::error!("Ensure the frontend is built ('npm run build' in web-ui) and FRONTEND_BUILD_PATH in .env is correct relative to the backend executable.");
+        log::error!(
+            "Ensure the frontend is built ('npm run build' in web-ui) and FRONTEND_BUILD_PATH in .env is correct relative to the backend executable."
+        );
         // Optionally panic or exit here if frontend is critical
         // return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Frontend build path not found"));
     } else if !frontend_path.join("index.html").exists() {
-        log::error!("index.html not found in frontend build path: {}", frontend_path.display());
+        log::error!(
+            "index.html not found in frontend build path: {}",
+            frontend_path.display()
+        );
         log::error!("Ensure the Next.js export process completed correctly.");
         // return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "index.html not found"));
     }
-
 
     let server_addr = format!("{}:{}", config.server_host, config.server_port);
     log::info!("Starting server at http://{}", server_addr);
 
     // Determine URL to open in browser
-    let open_url = utils::get_server_url(&config).unwrap_or_else(|| format!("http://localhost:{}", config.server_port));
+    let open_url = utils::get_server_url(&config)
+        .unwrap_or_else(|| format!("http://localhost:{}", config.server_port));
 
     // Spawn task to open browser
     tokio::spawn(async move {
@@ -89,10 +93,12 @@ async fn main() -> Result<()> {
         if webbrowser::open(&open_url).is_ok() {
             log::info!("Opened browser to {}", open_url);
         } else {
-            log::warn!("Failed to automatically open browser. Please navigate to {} manually.", open_url);
+            log::warn!(
+                "Failed to automatically open browser. Please navigate to {} manually.",
+                open_url
+            );
         }
     });
-
 
     let shared_state = web::Data::new(AppState {
         db_pool: pool.clone(),
@@ -132,7 +138,7 @@ async fn main() -> Result<()> {
                     .configure(api::qrcode::config_public),
             )
             // --- Static File Serving ---
-            .service(Files::new("/uploads", "./uploads").show_files_listing()) // Serve uploaded logos etc.
+            .service(Files::new("/uploads", "../public/uploads").show_files_listing()) // Serve uploaded logos etc.
             .service(
                 Files::new("/", &config.frontend_build_path)
                     .index_file("index.html")
@@ -142,21 +148,27 @@ async fn main() -> Result<()> {
                         let req_clone = req.request().clone(); // Clone the HttpRequest part
                         let index_path_clone = index_path.clone(); // Clone before moving into async block
                         async move {
-                            match actix_files::NamedFile::open(index_path_clone) { // Use the clone
+                            match actix_files::NamedFile::open(index_path_clone) {
+                                // Use the clone
                                 Ok(file) => {
                                     let res = file.into_response(&req_clone); // Create response using cloned request
                                     Ok(req.into_response(res)) // Turn original request into service response
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to open index.html for SPA fallback: {}", e);
-                                    Ok(req.into_response(HttpResponse::InternalServerError().finish())) // Turn original req into ServiceResponse
+                                    log::error!(
+                                        "Failed to open index.html for SPA fallback: {}",
+                                        e
+                                    );
+                                    Ok(req.into_response(
+                                        HttpResponse::InternalServerError().finish(),
+                                    )) // Turn original req into ServiceResponse
                                 }
                             }
                         }
                     }),
             )
     })
-        .bind(server_addr)?
-        .run()
-        .await
+    .bind(server_addr)?
+    .run()
+    .await
 }
