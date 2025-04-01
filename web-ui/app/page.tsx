@@ -17,6 +17,7 @@ import {
   CoursePreferences,
   loadPreferencesFromStorage
 } from './services/preferencesService';
+import { calculateProgress, fetchConfirmationCode } from './services/confirmationCodeService';
 
 // Types
 type EditorState = {
@@ -467,33 +468,72 @@ export default function Dashboard() {
   }, []);
   // --- End Initial Data Loading ---
 
-  // --- Confirmation Code Placeholder ---
+  // --- Confirmation Code Fetching ---
   useEffect(() => {
     if (!state.courseId) {
       dispatch({ type: 'SET_CONFIRMATION_CODE', payload: '------' });
       dispatch({ type: 'SET_CODE_PROGRESS', payload: 0 });
       return;
+    }
+
+    let pollInterval: NodeJS.Timeout | null = null;
+    let progressInterval: NodeJS.Timeout | null = null;
+    let expiresInSeconds = 0;
+
+    // Function to fetch the code from backend
+    const fetchCode = async () => {
+      try {
+        const codeData = await fetchConfirmationCode(state.courseId);
+        if (codeData) {
+          // If we get a temporary PENDING code, shorten the poll interval
+          if (codeData.code === "PENDING") {
+            // Retry sooner (every second) until we get a real code
+            setTimeout(fetchCode, 1000);
+            dispatch({ type: 'SET_CONFIRMATION_CODE', payload: 'PENDING...' });
+            return;
+          }
+
+          dispatch({ type: 'SET_CONFIRMATION_CODE', payload: codeData.code });
+          expiresInSeconds = codeData.expires_in_seconds;
+          dispatch({ type: 'SET_CODE_PROGRESS', payload: calculateProgress(expiresInSeconds) });
+        } else {
+          dispatch({ type: 'SET_CONFIRMATION_CODE', payload: 'NO CODE' });
+          dispatch({ type: 'SET_CODE_PROGRESS', payload: 0 });
+        }
+      } catch (error) {
+        console.error('Failed to fetch confirmation code:', error);
+        dispatch({ type: 'SET_CONFIRMATION_CODE', payload: 'ERROR' });
+        dispatch({ type: 'SET_CODE_PROGRESS', payload: 0 });
+      }
     };
-    console.warn("Using client-side placeholder for confirmation code.");
-    let codeTimer: NodeJS.Timeout | null = null, progressTimer: NodeJS.Timeout | null = null;
-    let expiryTime = Date.now() + 5 * 60 * 1000;
-    const generateAndSetCode = () => {
-      const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      expiryTime = Date.now() + 5 * 60 * 1000;
-      dispatch({ type: 'SET_CONFIRMATION_CODE', payload: newCode });
-      dispatch({ type: 'SET_CODE_PROGRESS', payload: 100 });
-    };
+
+    // Function to update the progress bar
     const updateProgress = () => {
-      const remaining = Math.max(0, expiryTime - Date.now());
-      dispatch({ type: 'SET_CODE_PROGRESS', payload: (remaining / (5 * 60 * 1000)) * 100 });
-      if (remaining <= 0 && codeTimer) generateAndSetCode();
+      if (expiresInSeconds <= 0) {
+        // When expires, fetch a new code
+        fetchCode();
+        return;
+      }
+
+      expiresInSeconds -= 1;
+      dispatch({ type: 'SET_CODE_PROGRESS', payload: calculateProgress(expiresInSeconds) });
     };
-    generateAndSetCode();
-    codeTimer = setInterval(generateAndSetCode, 5 * 60 * 1000);
-    progressTimer = setInterval(updateProgress, 1000);
-    return () => { if (codeTimer) clearInterval(codeTimer); if (progressTimer) clearInterval(progressTimer); };
+
+    // Initial fetch
+    fetchCode();
+
+    // Set up polling for code refreshes (every 4.5 minutes to be safe)
+    pollInterval = setInterval(fetchCode, 4.5 * 60 * 1000);
+
+    // Set up progress bar updates (every second)
+    progressInterval = setInterval(updateProgress, 1000);
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+      if (progressInterval) clearInterval(progressInterval);
+    };
   }, [state.courseId]);
-  // --- End Confirmation Code Placeholder ---
+  // --- End Confirmation Code Fetching ---
 
   // --- Current Time Update ---
   useEffect(() => {

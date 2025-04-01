@@ -306,6 +306,7 @@ async fn main() -> IoResult<()> {
                 web::scope("/api")
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
+                    .configure(api::confirmation_codes::config)
                     // Courses endpoints grouped by resource
                     .service(
                         web::resource("/courses")
