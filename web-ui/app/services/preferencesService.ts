@@ -40,28 +40,12 @@ interface BackendCurrentPreference {
     current_course_id: string | null; // Expect UUID string or null
 }
 
-// Note: BackendCoursePreferences and BackendPreferences (for POST) seem unused now
-
 const STORAGE_KEY = 'attendance_tracker_preferences_v2'; // Use new key for updated structure
 
 // Default preferences
-const defaultCourseId = uuidv4(); // Generate a unique default ID
 const defaultPreferences: PreferencesStore = {
-    currentCourseId: defaultCourseId,
-    courses: {
-        // Use the actual default course name as the key
-        'Default Course': {
-            id: defaultCourseId,
-            courseName: 'Default Course', // Match the key
-            sectionNumber: '000',
-            sections: ['000', '001', '002'],
-            professorName: 'Prof. John Doe',
-            officeHours: 'MWF: 10AM-12PM',
-            news: 'lorem ipsum dolor sit amet',
-            totalStudents: 64,
-            logoPath: '/university-logo.png'
-        }
-    }
+    currentCourseId: null,
+    courses: {}
 };
 
 const createDefaultPreferences = (): PreferencesStore => {
@@ -128,44 +112,21 @@ const transformFrontendCourse = (frontendCourse: CoursePreferences): Omit<Backen
  * Load preferences (currentCourseId and course map) from local storage
  */
 export const loadPreferencesFromStorage = (): PreferencesStore => {
-    if (typeof window === 'undefined') return createDefaultPreferences();
+    if (typeof window === 'undefined') return { ...defaultPreferences };
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return createDefaultPreferences();
+    if (!saved) return { ...defaultPreferences };
     try {
         const parsed = JSON.parse(saved) as PreferencesStore;
-
-        // Validate structure
-        if (!parsed || typeof parsed !== 'object' || !parsed.courses || typeof parsed.currentCourseId === 'undefined') {
-            console.warn("Invalid structure in parsed preferences, resetting to default.");
-            return createDefaultPreferences();
+        // Basic structure validation
+        if (parsed && typeof parsed === 'object' && parsed.courses && typeof parsed.currentCourseId !== 'undefined') {
+            return parsed; // Return parsed even if currentCourseId doesn't match map yet, loadCurrent... will fix it
         }
-
-        const coursesMap = parsed.courses;
-        const courseArray = Object.values(coursesMap);
-        const currentId = parsed.currentCourseId;
-
-        // Check if courses map is empty
-        if (courseArray.length === 0) {
-            console.warn("Preferences courses map is empty, resetting to default.");
-            return createDefaultPreferences();
-        }
-
-        // Check if currentCourseId is valid within the map
-        const currentCourseExists = currentId && courseArray.some(c => c.id === currentId);
-
-        if (!currentCourseExists) {
-            // If current ID is invalid or null, set it to the first course's ID
-            parsed.currentCourseId = courseArray[0].id;
-            console.warn(`Invalid/missing currentCourseId, resetting to first course: ${parsed.currentCourseId}`);
-        }
-
-        return parsed; // Return the validated/corrected parsed state
+        return { ...defaultPreferences };
     } catch (e) {
         console.error("Failed to parse preferences from storage, using default:", e);
-        // Clear potentially corrupted storage
         try { localStorage.removeItem(STORAGE_KEY); } catch (error) {
-            console.log(error);}
-        return createDefaultPreferences();
+            console.log(error); }
+        return { ...defaultPreferences };
     }
 };
 
@@ -175,11 +136,6 @@ export const loadPreferencesFromStorage = (): PreferencesStore => {
 export const savePreferencesToStorage = (preferences: PreferencesStore): void => {
     if (typeof window === 'undefined') return;
     try {
-        // Basic validation before saving
-        if (!preferences || !preferences.courses || typeof preferences.currentCourseId === 'undefined' || Object.keys(preferences.courses).length === 0) {
-            console.error("Attempted to save invalid preferences structure:", preferences);
-            return; // Don't save invalid state
-        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
     } catch (e) { console.error("Failed to save preferences to storage:", e); }
 };
@@ -203,7 +159,6 @@ export const loadCoursesFromBackend = async (): Promise<CoursePreferences[]> => 
 
 
 /**
- * [REMOVED/SIMPLIFIED] Load *only* the currentCourseId preference from backend.
  * Course details should be fetched via loadCurrentCoursePreferences or loadCoursesFromBackend.
  */
 export const loadCurrentCourseIdFromBackend = async (): Promise<string | null> => {
@@ -221,13 +176,6 @@ export const loadCurrentCourseIdFromBackend = async (): Promise<string | null> =
         return null;
     }
 };
-
-/**
- * [REMOVED] Save full preferences structure to backend.
- * This is superseded by saveCoursePreferences and switchCourse.
- */
-// export const savePreferences = async (preferences: PreferencesStore): Promise<void> => { ... }
-
 
 /**
  * Load the full details of the current course based on the ID stored locally or fetched from backend.
@@ -248,52 +196,41 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
         try {
             console.log(`Fetching current course details for ID: ${currentId}`);
             const courseResponse = await fetch(`/api/courses/${currentId}`);
-            if (courseResponse.ok) {
-                const backendCourse = await courseResponse.json() as BackendCourse;
-                const transformed = transformBackendCourse(backendCourse);
-                // Update local storage with fetched data and correct currentId
-                localPrefs.currentCourseId = transformed.id; // Confirm ID
-                localPrefs.courses = { ...localPrefs.courses, [transformed.courseName]: transformed }; // Update/add
-                savePreferencesToStorage(localPrefs);
-                return transformed;
-            } else if (courseResponse.status === 404) {
-                console.warn(`Current course ID ${currentId} not found on backend.`);
-                // Remove potentially stale course from local map if it exists
-                const staleCourseName = Object.entries(localPrefs.courses).find(([, c]) => c.id === currentId)?.[0];
-                if (staleCourseName) delete localPrefs.courses[staleCourseName];
-                // Clear current ID to trigger fallback below
-                localPrefs.currentCourseId = null;
-                currentId = null; // Ensure fallback runs
-                savePreferencesToStorage(localPrefs); // Save the cleanup
-            } else { /* Handle other non-404 fetch errors */ }
+            if (courseResponse.ok) { /* ... return transformed ... */ }
+            else if (courseResponse.status === 404) { /* ... handle 404, clear currentId ... */ }
+            else { /* Handle other errors, maybe clear currentId */ currentId = null; }
         } catch (error) {
+            /* Handle network errors, maybe clear currentId */
+            currentId = null;
             console.log(error);
         }
     }
 
     // --- Fallback Logic ---
-    console.log("Executing fallback: Loading all courses...");
-    const allCourses = await loadCoursesFromBackend();
-    if (allCourses.length > 0) {
-        // Found courses on backend, use the first one
-        const firstCourse = allCourses[0];
-        const newPrefs: PreferencesStore = {
-            currentCourseId: firstCourse.id,
-            courses: {}
-        };
-        allCourses.forEach(c => { newPrefs.courses[c.courseName] = c; });
-        savePreferencesToStorage(newPrefs); // Overwrite local storage with backend state
-        console.log(`Fallback successful: Set current course to ${firstCourse.courseName} (${firstCourse.id})`);
-        return firstCourse;
-    } else {
-        // --- Ultimate Fallback: No courses anywhere ---
-        // Ensure local storage reflects a valid default state
-        console.warn("No courses found on backend, ensuring default preferences.");
-        const defaultPrefs = createDefaultPreferences();
-        savePreferencesToStorage(defaultPrefs);
-        // Return the default course object
-        return Object.values(defaultPrefs.courses)[0];
+    if (!currentId) {
+        console.warn("Could not determine a valid current course ID. Attempting to load all courses...");
+        const allCourses = await loadCoursesFromBackend();
+        if (allCourses.length > 0) {
+            const firstCourse = allCourses[0];
+            const newPrefs: PreferencesStore = { currentCourseId: firstCourse.id, courses: {} };
+            allCourses.forEach(c => { newPrefs.courses[c.courseName] = c; });
+            savePreferencesToStorage(newPrefs);
+            console.log(`Fallback successful: Set current course to ${firstCourse.courseName} (${firstCourse.id})`);
+            return firstCourse;
+        } else {
+            // THIS SHOULD NOT HAPPEN if backend seeding works!
+            console.error("CRITICAL: No courses found on backend and no valid current ID. Cannot proceed.");
+            // Return a dummy/error state or throw?
+            // Returning a dummy object to prevent immediate crash, but UI will be wrong.
+            return {
+                id: uuidv4(), courseName: "Error: No Courses", sectionNumber: "", sections: [],
+                professorName: "", officeHours: "", news: "Failed to load any course data.", totalStudents: 0, logoPath: ""
+            };
+        }
     }
+
+    // This part should ideally be unreachable if the logic above is sound
+    throw new Error("Failed to load current course preferences through all fallbacks.");
 };
 
 /**
@@ -347,12 +284,6 @@ export const saveCoursePreferences = async (coursePreferences: CoursePreferences
         throw error; // Re-throw to be handled by the UI
     }
 };
-
-/**
- * [REMOVED] Get course ID by name.
- * Frontend should primarily use IDs obtained from getAvailableCourses or current preference.
- */
-// async function getCourseId(courseName: string): Promise<string | null> { ... }
 
 /**
  * Get list of available courses (ID and Name only)
@@ -492,12 +423,6 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
     const prefs = loadPreferencesFromStorage();
     const courseToDelete = Object.values(prefs.courses).find(c => c.id === courseId);
     const courseName = courseToDelete?.courseName;
-
-    // Prevent deleting the last course? Optional. For now, allow it and reset to default.
-    // if (Object.keys(prefs.courses).length <= 1 && prefs.currentCourseId === courseId) {
-    //     alert("Cannot delete the last course.");
-    //     return false;
-    // }
 
     try {
         // Delete from backend

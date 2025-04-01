@@ -16,7 +16,7 @@ import {
   deleteCourse,
   CoursePreferences,
   loadPreferencesFromStorage
-} from './services/preferencesService'; // Assuming path is correct
+} from './services/preferencesService';
 
 // Types
 type EditorState = {
@@ -74,20 +74,63 @@ type CourseAction =
 
 // Initial state setup using preference service
 const getInitialState = (): CourseState => {
-  const initialPrefsStore = loadPreferencesFromStorage();
-  const currentCourseData = Object.values(initialPrefsStore.courses).find(c => c.id === initialPrefsStore.currentCourseId)!;
+  console.log("getInitialState called");
+  let initialCourse: CoursePreferences | undefined = undefined;
+  let initialCourseId: string | null = null;
+
+  try {
+    const initialPrefsStore = loadPreferencesFromStorage(); // Load validated local state
+    console.log("Initial prefs from storage:", initialPrefsStore);
+
+    initialCourseId = initialPrefsStore.currentCourseId; // Get potential current ID
+
+    if (initialCourseId) {
+      // Try finding the course data corresponding to the ID in the stored map
+      initialCourse = Object.values(initialPrefsStore.courses).find(c => c?.id === initialCourseId);
+      console.log("Found initial course in storage by ID:", initialCourseId, initialCourse);
+    }
+
+    // If not found by ID (maybe ID is stale or points nowhere), try getting the first course
+    if (!initialCourse && Object.keys(initialPrefsStore.courses).length > 0) {
+      initialCourse = Object.values(initialPrefsStore.courses)[0];
+      initialCourseId = initialCourse?.id ?? null; // Update ID if we took the first course
+      console.log("Initial course not found by ID, using first course:", initialCourse);
+    }
+  } catch (e) {
+    console.error("Error processing initial state from storage:", e);
+    // Fallback to ensure initialCourse remains undefined
+  }
+
+  // If still no course found (empty storage, errors), create a safe default structure
+  if (!initialCourse) {
+    console.log("No valid initial course found, using default structure.");
+    // Use a safe, minimal default structure to avoid runtime errors
+    // Ideally, the preference service exports a function to create this default.
+    initialCourse = {
+      id: null, // Important: Start with null ID if truly default/empty
+      courseName: "Setup Course",
+      sectionNumber: "000",
+      sections: [],
+      professorName: "Setup",
+      officeHours: "",
+      news: "Please create or select a course.",
+      totalStudents: 0,
+      logoPath: "/university-logo.png", // Default logo
+    };
+    initialCourseId = null; // Ensure ID is null if default
+  }
 
   return {
-    courseId: currentCourseData.id,
-    courseName: currentCourseData.courseName,
-    sectionNumber: currentCourseData.sectionNumber,
-    sections: currentCourseData.sections,
-    professorName: currentCourseData.professorName,
-    officeHours: currentCourseData.officeHours,
-    news: currentCourseData.news,
-    totalStudents: currentCourseData.totalStudents,
-    logoPath: currentCourseData.logoPath,
-    isLoading: true, // Start in loading state, useEffect will fetch real data
+    courseId: initialCourse.id, // Use the resolved initial course ID (can be null)
+    courseName: initialCourse.courseName,
+    sectionNumber: initialCourse.sectionNumber,
+    sections: initialCourse.sections,
+    professorName: initialCourse.professorName,
+    officeHours: initialCourse.officeHours,
+    news: initialCourse.news,
+    totalStudents: initialCourse.totalStudents,
+    logoPath: initialCourse.logoPath,
+    isLoading: true, // Always start loading, useEffect will fetch real data
     isCustomizing: false,
     presentCount: 0,
     confirmationCode: "...",
@@ -103,22 +146,24 @@ const getInitialState = (): CourseState => {
 function courseReducer(state: CourseState, action: CourseAction): CourseState {
   switch (action.type) {
     case 'INITIALIZE_PREFERENCES':
+      // Ensure we handle null ID payload correctly
+      const payloadId = action.payload?.id ?? null;
       return {
-        ...state,
-        courseId: action.payload.id,
-        courseName: action.payload.courseName,
-        sectionNumber: action.payload.sectionNumber,
-        sections: action.payload.sections,
-        professorName: action.payload.professorName,
-        officeHours: action.payload.officeHours,
-        news: action.payload.news,
-        totalStudents: action.payload.totalStudents,
-        logoPath: action.payload.logoPath,
+        ...state, // Keep existing state structure
+        courseId: payloadId,
+        courseName: action.payload?.courseName ?? 'Unnamed Course',
+        sectionNumber: action.payload?.sectionNumber ?? '000',
+        sections: action.payload?.sections ?? [],
+        professorName: action.payload?.professorName ?? '',
+        officeHours: action.payload?.officeHours ?? '',
+        news: action.payload?.news ?? '',
+        totalStudents: action.payload?.totalStudents ?? 0,
+        logoPath: action.payload?.logoPath ?? '/university-logo.png',
         isLoading: false,
         error: null,
-        presentCount: 0,
-        confirmationCode: "...",
-        codeProgress: 100,
+        presentCount: 0, // Reset on init/switch
+        confirmationCode: "...", // Reset placeholder
+        codeProgress: 100, // Reset placeholder
       };
     case 'SET_COURSE_ID':
       return { ...state, courseId: action.payload };
@@ -129,8 +174,9 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
       return {
         ...state,
         isCustomizing: nextIsCustomizing,
-        editing: nextIsCustomizing ? state.editing : getInitialState().editing,
-        dropdowns: getInitialState().dropdowns,
+        // Only reset editors when *entering* customize mode for better editing flow? No, reset on toggle.
+        editing: getInitialState().editing, // Reset editors always on toggle
+        dropdowns: getInitialState().dropdowns, // Close dropdowns always
       };
     case 'SET_COURSE_NAME':
       return { ...state, courseName: action.payload };
@@ -191,55 +237,87 @@ function useAttendanceWebSocket(courseId: string | null, onMessage: (count: numb
 
   useEffect(() => {
     wsErrorRef.current = null;
+
     if (!courseId) {
+      console.log("WS: No course ID, closing connection if any.");
       wsRef.current?.close();
+
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+
       setIsConnected(false);
       return;
     }
+
     let isMounted = true;
+    console.log("WS: Attempting to connect for course:", courseId);
+
     const connectWebSocket = () => {
       if (!isMounted) return;
+
       wsRef.current?.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      wsRef.current = new WebSocket(`ws://${window.location.host}/api/ws/${courseId}`);
+
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws/${courseId}`;
+      console.log("WS: Connecting to:", wsUrl);
+      wsRef.current = new WebSocket(wsUrl);
+
       wsRef.current.onopen = () => {
         if (!isMounted) return;
         console.log('WS: WebSocket connected for course:', courseId);
         setIsConnected(true);
         wsErrorRef.current = null;
       };
+
       wsRef.current.onmessage = (event) => {
         if (!isMounted) return;
         try {
           const data = JSON.parse(event.data);
+          console.log("WS: Received message:", data);
           if (data.type === 'attendance_update' && typeof data.presentCount === 'number') {
             onMessage(data.presentCount);
           }
         } catch (err) { console.error('WS: Error parsing WebSocket message:', err); }
       };
+
       wsRef.current.onerror = (event) => {
         if (!isMounted) return;
         console.error('WS: WebSocket error:', event);
         wsErrorRef.current = 'Connection error.';
         setIsConnected(false);
       };
+
       wsRef.current.onclose = (event) => {
         if (!isMounted) return;
         console.log('WS: WebSocket connection closed.', event.reason);
         setIsConnected(false);
-        const timeout = setTimeout(() => { if (isMounted) connectWebSocket(); }, 5000);
+
+        const timeout = setTimeout(() => {
+          if (isMounted) {
+            console.log("WS: Attempting to reconnect...");
+            connectWebSocket();
+          }
+        }, 5000 + Math.random() * 3000); // Jitter
         reconnectTimeoutRef.current = timeout;
       };
     };
+
     connectWebSocket();
+
     return () => {
+      console.log("WS: Cleaning up WebSocket connection for", courseId);
       isMounted = false;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+
+      if (reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
       setIsConnected(false);
     };
   }, [courseId, onMessage]);
+
   return { isConnected, error: wsErrorRef.current };
 }
 
@@ -248,7 +326,6 @@ function useAttendanceWebSocket(courseId: string | null, onMessage: (count: numb
 export default function Dashboard() {
   const [state, dispatch] = useReducer(courseReducer, getInitialState());
   const [currentTime, setCurrentTime] = useState(new Date());
-  // State for the new course creation UI
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [newCourseNameInput, setNewCourseNameInput] = useState("");
 
@@ -307,7 +384,6 @@ export default function Dashboard() {
       debouncedSave(currentCoursePrefsForSave);
     }
   }, [state.isLoading, state.isCustomizing, currentCoursePrefsForSave, debouncedSave]);
-  // --- End Debounced Save ---
 
   // --- WebSocket Hook ---
   const { isConnected: isWsConnected, error: wsError } = useAttendanceWebSocket(
@@ -320,22 +396,38 @@ export default function Dashboard() {
     let isMounted = true;
     async function loadInitialData() {
       if (!isMounted) return;
-      dispatch({ type: 'SET_LOADING', payload: true });
+      console.log("Effect: Loading initial course preferences...");
+
       try {
         const currentPrefs = await loadCurrentCoursePreferences();
-        if (!isMounted) return;
-        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
-        prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs); // Initialize saved state ref
 
-        const courses = await getAvailableCourses();
         if (!isMounted) return;
+        console.log("Effect: Loaded preferences:", currentPrefs);
+
+        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
+
+        // Initialize saved ref *after* successful load/init
+        prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs);
+
+        console.log("Effect: Loading available courses...");
+        const courses = await getAvailableCourses();
+
+        if (!isMounted) return;
+        console.log("Effect: Loaded available courses:", courses);
+
         dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
       } catch (error) {
         if (!isMounted) return;
-        console.error('Error loading initial data:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to load initial data.' });
-      } finally { if (isMounted) dispatch({ type: 'SET_LOADING', payload: false }); }
+        console.error('Effect: Error loading initial data:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Failed to load initial course data.' });
+      } finally {
+        // isLoading is set to false within INITIALIZE_PREFERENCES or SET_ERROR
+        if (isMounted) { dispatch({ type: 'SET_LOADING', payload: false }); }
+      }
     }
+
+    // Only run fetch if initial state indicates no valid course ID was found (or always run to refresh?)
+    // Let's always run to ensure we sync with backend state on load.
     loadInitialData();
     return () => { isMounted = false; };
   }, []);
@@ -559,7 +651,7 @@ export default function Dashboard() {
   // --- End Handler Functions ---
 
   // --- Loading Indicator ---
-  if (state.isLoading && state.courseId === null) { // Show only on initial load
+  if (state.isLoading && !state.courseId && !state.error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="flex flex-col items-center">
