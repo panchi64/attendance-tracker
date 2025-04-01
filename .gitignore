@@ -49,6 +49,7 @@ target/
 # Database files
 attendance.db
 .sqlx/
+database.db
 
 
 

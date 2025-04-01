@@ -1,55 +1,33 @@
-use chrono::{DateTime, Utc};
+use chrono::{NaiveDateTime};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use sqlx::FromRow;
+use uuid::Uuid; // To link to course.id
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Attendance {
-    pub id: Uuid,
-    pub course_id: Uuid,
-    pub student_name: String,
-    pub student_id: String,
-    pub timestamp: DateTime<Utc>,
-    pub confirmation_code: String,
-    pub ip_address: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AttendanceSubmission {
-    pub course_id: Uuid,
-    pub student_name: String,
-    pub student_id: String,
-    pub confirmation_code: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AttendanceStats {
-    pub total_records: i64,
-    pub unique_students: i64,
-    pub today_attendance: i64,
-    pub attendance_by_date: Vec<(String, i64)>,
-}
-
-#[derive(Debug, sqlx::FromRow)]
+// Structure for database interaction
+#[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct AttendanceRecord {
-    pub id: String,
-    pub course_id: String,
+    pub id: i64, // Primary key AUTOINCREMENT
+    pub course_id: Uuid, // Foreign key
     pub student_name: String,
     pub student_id: String,
-    pub timestamp: String,
-    pub confirmation_code: String,
-    pub ip_address: Option<String>,
+    pub timestamp: NaiveDateTime,
 }
 
-impl From<AttendanceRecord> for Attendance {
-    fn from(record: AttendanceRecord) -> Self {
-        Attendance {
-            id: Uuid::parse_str(&record.id).unwrap_or_else(|_| Uuid::nil()),
-            course_id: Uuid::parse_str(&record.course_id).unwrap_or_else(|_| Uuid::nil()),
-            student_name: record.student_name,
-            student_id: record.student_id,
-            timestamp: record.timestamp.parse().unwrap_or_else(|_| Utc::now()),
-            confirmation_code: record.confirmation_code,
-            ip_address: record.ip_address,
-        }
-    }
+// Structure for API request (POST /api/attendance)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubmitAttendancePayload {
+    // Frontend sends course *name*? Or *id*? Frontend code uses 'courseId' from URL param `course`.
+    // Let's assume frontend sends UUID string.
+    pub course_id: String, // Needs parsing to Uuid
+    pub student_name: String,
+    pub student_id: String,
+    pub confirmation_code: String,
+}
+
+// Structure for API response (maybe just success message or the created record)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttendanceResponse {
+    pub message: String,
+    pub student_name: String, // Echo back for confirmation message
+    // Optionally include the record ID or timestamp
 }

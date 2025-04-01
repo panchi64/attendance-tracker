@@ -1,20 +1,30 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use sqlx::FromRow;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Preferences {
-    pub current_course: String,
-    pub courses: HashMap<String, CoursePreferences>,
+// Structure for database interaction
+#[derive(Debug, FromRow, Serialize, Deserialize)]
+pub struct Preference {
+    pub key: String,
+    pub value: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CoursePreferences {
-    pub course_name: String,
-    pub section_number: String,
-    pub sections: Vec<String>,
-    pub professor_name: String,
-    pub office_hours: String,
-    pub news: String,
-    pub total_students: i32,
-    pub logo_path: String,
+// Structure for API request (POST /api/preferences) - Simplified
+// Frontend sends { current_course: courseName } or full PrefsStore
+// Let's handle setting the current course ID. Frontend should send ID now.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetCurrentCoursePayload {
+    pub current_course_id: String, // Expecting UUID string
+}
+
+// Structure for API response (GET /api/preferences)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PreferencesResponse {
+    pub current_course_id: Option<String>, // UUID string
+    // Add other global preferences here if needed
+}
+
+// Structure for Switch Course API Request (POST /api/courses/switch)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SwitchCoursePayload {
+    pub course_name: String, // Frontend preferenceService sends name
 }

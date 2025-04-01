@@ -1,275 +1,168 @@
-use crate::models::course::{Course, CourseCreation, CoursePartial};
-use crate::utils::error::Error;
-use actix_web::{HttpResponse, delete, get, post, put, web};
-use chrono::Utc;
-use serde_json::json;
-use sqlx::{Pool, Sqlite};
+use crate::{
+    db::{courses as course_db, preferences as pref_db},
+    errors::{AppError},
+    models::course::{Course, CreateCoursePayload, UpdateCoursePayload, json_to_vec_string},
+    models::preferences::SwitchCoursePayload,
+    AppState,
+};
+use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
+use chrono::NaiveDateTime;
+use serde::Serialize;
 use uuid::Uuid;
 
-#[get("/courses")]
-pub async fn list_courses(db: web::Data<Pool<Sqlite>>) -> Result<HttpResponse, Error> {
-    // Using query instead of query_as due to type conversion issues
-    let courses_records = sqlx::query!("SELECT * FROM courses ORDER BY name")
-        .fetch_all(&**db)
-        .await?;
-
-    // Manually convert records to Course type
-    let courses = courses_records
-        .into_iter()
-        .map(|record| {
-            let sections: Vec<String> =
-                serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
-            Course {
-                id: match &record.id {
-                    Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
-                    None => Uuid::nil(),
-                },
-                name: record.name,
-                section_number: record.section_number,
-                sections,
-                professor_name: record.professor_name,
-                office_hours: record.office_hours,
-                news: record.news,
-                total_students: record.total_students as i32,
-                logo_path: record.logo_path,
-                created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
-                    record.created_at,
-                    Utc,
-                ),
-                updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
-                    record.created_at,
-                    Utc,
-                ),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    Ok(HttpResponse::Ok().json(courses))
+// Transform Course DB model to API response (converting sections)
+#[derive(Debug, Serialize)]
+struct CourseApiResponse {
+    id: String, // Send UUID as string
+    name: String,
+    section_number: String,
+    sections: Vec<String>, // Send as Vec<String>
+    professor_name: String,
+    office_hours: String,
+    news: String,
+    total_students: i64,
+    logo_path: String,
+    // We might not want to expose confirmation codes directly here
+    // confirmation_code: Option<String>,
+    // confirmation_code_expires_at: Option<NaiveDateTime>,
+    created_at: NaiveDateTime,
+    updated_at: NaiveDateTime,
 }
+
+impl From<Course> for CourseApiResponse {
+    fn from(course: Course) -> Self {
+        CourseApiResponse {
+            id: course.id.to_string(),
+            name: course.name,
+            section_number: course.section_number,
+            sections: json_to_vec_string(&course.sections), // Convert JSON back
+            professor_name: course.professor_name,
+            office_hours: course.office_hours,
+            news: course.news,
+            total_students: course.total_students,
+            logo_path: course.logo_path,
+            created_at: course.created_at,
+            updated_at: course.updated_at,
+        }
+    }
+}
+
 
 #[post("/courses")]
-pub async fn create_course(
-    course: web::Json<CourseCreation>,
-    db: web::Data<Pool<Sqlite>>,
-) -> Result<HttpResponse, Error> {
-    let course_data = course.into_inner();
-    let id = Uuid::new_v4();
-    let now = Utc::now();
+async fn create_course_handler(
+    state: web::Data<AppState>,
+    payload: web::Json<CreateCoursePayload>,
+) -> Result<impl Responder, AppError> {
+    log::info!("Attempting to create course: {}", payload.name);
+    let created_course = course_db::create_course(&state.db_pool, &payload).await?;
+    log::info!("Successfully created course ID: {}", created_course.id);
 
-    // Convert sections to JSON
-    let sections_json = serde_json::to_string(&course_data.sections)?;
+    // If this is the *first* course created, maybe set it as current?
+    if pref_db::get_current_course_id(&state.db_pool).await?.is_none() {
+        log::info!("Setting newly created course {} as current.", created_course.id);
+        pref_db::set_current_course_id(&state.db_pool, created_course.id).await?;
+    }
 
-    // Create string versions of variables to avoid temporary value drops
-    let id_str = id.to_string();
-    let now_str1 = now.to_rfc3339();
-    let now_str2 = now.to_rfc3339();
-
-    sqlx::query!(
-        "INSERT INTO courses
-            (id, name, section_number, sections, professor_name,
-            office_hours, news, total_students, logo_path, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        id_str,
-        course_data.name,
-        course_data.section_number,
-        sections_json,
-        course_data.professor_name,
-        course_data.office_hours,
-        course_data.news,
-        course_data.total_students,
-        course_data.logo_path,
-        now_str1,
-        now_str2
-    )
-    .execute(&**db)
-    .await?;
-
-    let new_course = Course {
-        id,
-        name: course_data.name,
-        section_number: course_data.section_number,
-        sections: course_data.sections,
-        professor_name: course_data.professor_name,
-        office_hours: course_data.office_hours,
-        news: course_data.news,
-        total_students: course_data.total_students,
-        logo_path: course_data.logo_path,
-        created_at: now,
-        updated_at: now,
-    };
-
-    Ok(HttpResponse::Created().json(new_course))
+    Ok(HttpResponse::Created().json(CourseApiResponse::from(created_course)))
 }
 
-#[get("/courses/{id}")]
-pub async fn get_course(
-    path: web::Path<String>,
-    db: web::Data<Pool<Sqlite>>,
-) -> Result<HttpResponse, Error> {
-    let id = Uuid::parse_str(&path.into_inner())?;
-    let id_str = id.to_string();
-
-    // Use query instead of query_as and convert manually
-    let course_record = sqlx::query!("SELECT * FROM courses WHERE id = ?", id_str)
-        .fetch_optional(&**db)
-        .await?;
-
-    match course_record {
-        Some(record) => {
-            let sections: Vec<String> =
-                serde_json::from_str(&record.sections).unwrap_or_else(|_| vec![]);
-            let course = Course {
-                id: match &record.id {
-                    Some(id_str) => Uuid::parse_str(id_str).unwrap_or_else(|_| Uuid::nil()),
-                    None => Uuid::nil(),
-                },
-                name: record.name,
-                section_number: record.section_number,
-                sections,
-                professor_name: record.professor_name,
-                office_hours: record.office_hours,
-                news: record.news,
-                total_students: record.total_students as i32,
-                logo_path: record.logo_path,
-                created_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
-                    record.created_at,
-                    Utc,
-                ),
-                updated_at: chrono::DateTime::<Utc>::from_naive_utc_and_offset(
-                    record.created_at,
-                    Utc,
-                ),
-            };
-            Ok(HttpResponse::Ok().json(course))
-        }
-        None => Ok(HttpResponse::NotFound().json(json!({
-            "error": "Course not found"
-        }))),
+#[get("/courses")]
+async fn get_courses_handler(
+    state: web::Data<AppState>,
+    query: web::Query<std::collections::HashMap<String, String>>, // For ?name=...
+) -> Result<impl Responder, AppError> {
+    if let Some(name) = query.get("name") {
+        log::debug!("Fetching course by name: {}", name);
+        let course = course_db::fetch_course_by_name(&state.db_pool, name).await?;
+        Ok(HttpResponse::Ok().json(vec![CourseApiResponse::from(course)])) // Return single item in array as frontend expects
+    } else {
+        log::debug!("Fetching all courses");
+        let courses = course_db::fetch_all_courses(&state.db_pool).await?;
+        let response: Vec<CourseApiResponse> = courses.into_iter().map(CourseApiResponse::from).collect();
+        Ok(HttpResponse::Ok().json(response))
     }
 }
+
+// Note: Frontend might call GET /courses?name=... instead of /courses/{id}
+// Keep this endpoint for potential direct ID access if needed.
+#[get("/courses/{id}")]
+async fn get_course_by_id_handler(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<impl Responder, AppError> {
+    let course_id = path.into_inner();
+    log::debug!("Fetching course by ID: {}", course_id);
+    let course = course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
+    Ok(HttpResponse::Ok().json(CourseApiResponse::from(course)))
+}
+
 
 #[put("/courses/{id}")]
-pub async fn update_course(
-    path: web::Path<String>,
-    course: web::Json<CoursePartial>,
-    db: web::Data<Pool<Sqlite>>,
-) -> Result<HttpResponse, Error> {
-    let id = Uuid::parse_str(&path.into_inner())?;
-    let id_str = id.to_string();
-    let course_data = course.into_inner();
-
-    // Get existing course
-    let existing = sqlx::query!("SELECT * FROM courses WHERE id = ?", id_str)
-        .fetch_optional(&**db)
-        .await?;
-
-    if existing.is_none() {
-        return Ok(HttpResponse::NotFound().json(json!({
-            "error": "Course not found"
-        })));
-    }
-
-    let existing = existing.unwrap();
-    let now = Utc::now();
-
-    // Apply updates (only non-None fields)
-    let name = course_data.name.unwrap_or(existing.name);
-    let section_number = course_data
-        .section_number
-        .unwrap_or(existing.section_number);
-
-    // Parse existing sections
-    let existing_sections: Vec<String> =
-        serde_json::from_str(&existing.sections).unwrap_or_else(|_| vec![]);
-
-    let sections = course_data.sections.unwrap_or(existing_sections);
-    let sections_json = serde_json::to_string(&sections)?;
-
-    let professor_name = course_data
-        .professor_name
-        .unwrap_or(existing.professor_name);
-    let office_hours = course_data.office_hours.unwrap_or(existing.office_hours);
-    let news = course_data.news.unwrap_or(existing.news);
-    let total_students = course_data
-        .total_students
-        .unwrap_or(existing.total_students as i32);
-    let logo_path = course_data.logo_path.unwrap_or(existing.logo_path);
-
-    // Store temporary values
-    let now_str = now.to_rfc3339();
-    let id_str = id.to_string();
-
-    let result = sqlx::query!(
-        "UPDATE courses
-         SET name = ?, section_number = ?, sections = ?, professor_name = ?,
-             office_hours = ?, news = ?, total_students = ?, logo_path = ?, updated_at = ?
-         WHERE id = ?",
-        name,
-        section_number,
-        sections_json,
-        professor_name,
-        office_hours,
-        news,
-        total_students,
-        logo_path,
-        now_str,
-        id_str
-    )
-    .execute(&**db)
-    .await?;
-
-    Ok(HttpResponse::Ok().json(json!({
-        "success": true,
-        "message": "Course updated successfully",
-        "rows_affected": result.rows_affected()
-    })))
+async fn update_course_handler(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    payload: web::Json<UpdateCoursePayload>,
+) -> Result<impl Responder, AppError> {
+    let course_id = path.into_inner();
+    log::info!("Attempting to update course ID: {}", course_id);
+    let updated_course = course_db::update_course(&state.db_pool, course_id, &payload).await?;
+    log::info!("Successfully updated course ID: {}", course_id);
+    // Notify WebSocket clients about the update? (Future enhancement)
+    Ok(HttpResponse::Ok().json(CourseApiResponse::from(updated_course)))
 }
 
 #[delete("/courses/{id}")]
-pub async fn delete_course(
-    path: web::Path<String>,
-    db: web::Data<Pool<Sqlite>>,
-) -> Result<HttpResponse, Error> {
-    let id = Uuid::parse_str(&path.into_inner())?;
-    let id_str = id.to_string();
+async fn delete_course_handler(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<impl Responder, AppError> {
+    let course_id = path.into_inner();
+    log::info!("Attempting to delete course ID: {}", course_id);
 
-    // Check if course exists
-    let existing = sqlx::query!("SELECT id FROM courses WHERE id = ?", id_str)
-        .fetch_optional(&**db)
-        .await?;
-
-    if existing.is_none() {
-        return Ok(HttpResponse::NotFound().json(json!({
-            "error": "Course not found"
-        })));
+    // Check if it's the current course
+    let current_id = pref_db::get_current_course_id(&state.db_pool).await?;
+    if current_id == Some(course_id) {
+        // Find another course to switch to, or clear the preference
+        let all_courses = course_db::fetch_all_courses(&state.db_pool).await?;
+        let next_course = all_courses.iter().find(|c| c.id != course_id);
+        if let Some(next) = next_course {
+            log::info!("Deleted current course, switching to course ID: {}", next.id);
+            pref_db::set_current_course_id(&state.db_pool, next.id).await?;
+        } else {
+            log::info!("Deleted the only course, clearing current course preference.");
+            // Setting an empty string or a specific "none" value might be better than direct NULL
+            sqlx::query!(r#"INSERT OR REPLACE INTO preferences (key, value) VALUES ('current_course_id', '')"#)
+                .execute(&state.db_pool).await?;
+        }
     }
 
-    // Delete course
-    let result = sqlx::query!("DELETE FROM courses WHERE id = ?", id_str)
-        .execute(&**db)
-        .await?;
-
-    Ok(HttpResponse::Ok().json(json!({
-        "success": true,
-        "message": "Course deleted successfully",
-        "rows_affected": result.rows_affected()
-    })))
+    let affected_rows = course_db::delete_course(&state.db_pool, course_id).await?;
+    log::info!("Successfully deleted course ID: {} ({} rows affected)", course_id, affected_rows);
+    // Notify WebSocket clients?
+    Ok(HttpResponse::NoContent().finish()) // 204 No Content is appropriate for DELETE
 }
 
+// Endpoint to explicitly switch the current course
 #[post("/courses/switch")]
-pub async fn switch_course(
-    data: web::Json<serde_json::Value>,
-    _db: web::Data<Pool<Sqlite>>,
-) -> Result<HttpResponse, Error> {
-    let _course_name = data
-        .get("courseName")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::validation("Course name is required"))?;
+async fn switch_course_handler(
+    state: web::Data<AppState>,
+    payload: web::Json<SwitchCoursePayload>,
+) -> Result<impl Responder, AppError> {
+    log::info!("Attempting to switch current course to name: {}", payload.course_name);
+    // Find the course ID by name
+    let course = course_db::fetch_course_by_name(&state.db_pool, &payload.course_name).await?;
+    // Update the preference
+    pref_db::set_current_course_id(&state.db_pool, course.id).await?;
+    log::info!("Successfully set current course ID to: {}", course.id);
+    Ok(HttpResponse::Ok().json(serde_json::json!({"message": "Current course switched successfully", "current_course_id": course.id.to_string()})))
+}
 
-    // TODO: Implement course switching logic
-
-    Ok(HttpResponse::Ok().json(json!({
-        "success": true,
-        "message": "Course switched successfully"
-    })))
+// Host-only configuration
+pub fn config_host_only(cfg: &mut web::ServiceConfig) {
+    cfg.service(create_course_handler)
+        .service(get_courses_handler) // Also needed by host for listing/switching
+        .service(get_course_by_id_handler) // Potentially needed by host
+        .service(update_course_handler)
+        .service(delete_course_handler)
+        .service(switch_course_handler);
 }

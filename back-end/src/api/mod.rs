@@ -1,6 +1,7 @@
 pub mod attendance;
-pub mod confirmation;
 pub mod courses;
+pub mod export;
 pub mod preferences;
 pub mod qrcode;
-pub mod uploads;
+pub mod upload;
+pub mod ws;

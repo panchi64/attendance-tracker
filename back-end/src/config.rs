@@ -1,34 +1,43 @@
+use anyhow::{Context, Result};
 use std::env;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub host: String,
-    pub port: u16,
     pub database_url: String,
-    pub jwt_secret: String,
-    pub auto_open_browser: bool,
-    pub confirmation_code_expiry_mins: i64,
+    pub server_host: String,
+    pub server_port: u16,
+    pub frontend_build_path: String,
+    pub base_url: Option<String>, // Explicit base URL if needed (e.g., behind proxy)
+    pub app_secret: String,
+    pub confirmation_code_duration: Duration,
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self, env::VarError> {
+    pub fn from_env() -> Result<Self> {
+        let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
+        let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let server_port = env::var("SERVER_PORT")
+            .context("SERVER_PORT must be set")?
+            .parse::<u16>()
+            .context("SERVER_PORT must be a valid u16 number")?;
+        let frontend_build_path = env::var("FRONTEND_BUILD_PATH")
+            .context("FRONTEND_BUILD_PATH must be set")?;
+        let base_url = env::var("BASE_URL").ok().filter(|s| !s.is_empty()); // Optional
+        let app_secret = env::var("APP_SECRET").context("APP_SECRET must be set")?;
+        let confirmation_code_duration_secs = env::var("CONFIRMATION_CODE_DURATION_SECONDS")
+            .context("CONFIRMATION_CODE_DURATION_SECONDS must be set")?
+            .parse::<u64>()
+            .context("CONFIRMATION_CODE_DURATION_SECONDS must be a valid u64 number")?;
+
         Ok(Self {
-            host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
-                .parse()
-                .unwrap_or(8080),
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite:attendance.db".to_string()),
-            jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| "your-secret-key".to_string()),
-            auto_open_browser: env::var("AUTO_OPEN_BROWSER")
-                .unwrap_or_else(|_| "true".to_string())
-                .parse()
-                .unwrap_or(true),
-            confirmation_code_expiry_mins: env::var("CONFIRMATION_CODE_EXPIRY_MINS")
-                .unwrap_or_else(|_| "5".to_string())
-                .parse()
-                .unwrap_or(5),
+            database_url,
+            server_host,
+            server_port,
+            frontend_build_path,
+            base_url,
+            app_secret,
+            confirmation_code_duration: Duration::from_secs(confirmation_code_duration_secs),
         })
     }
 }

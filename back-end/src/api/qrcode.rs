@@ -1,33 +1,53 @@
-use crate::services::qrcode::QrCodeService;
-use crate::utils::error::Error;
-use actix_web::{HttpResponse, get, http::header, web};
-use local_ip_address::local_ip;
+use crate::{
+    db::courses as course_db, // Use alias for clarity
+    errors::{AppError},
+    utils, // Import utils for get_server_url
+    AppState, // Use AppState now
+};
+use actix_web::{get, web, HttpResponse, Responder};
+use image::{ImageFormat, Luma};
+use qrcode::QrCode;
+use std::io::Cursor;
+use uuid::Uuid;
 
-// Generate QR code route
+
 #[get("/qrcode/{course_id}")]
-pub async fn generate_qr_code(
-    path: web::Path<String>,
-    qrcode_service: web::Data<QrCodeService>,
-    config: web::Data<crate::config::Config>,
-) -> Result<HttpResponse, Error> {
+async fn generate_qr_code(
+    state: web::Data<AppState>, // Get state
+    path: web::Path<Uuid>,
+) -> Result<impl Responder, AppError> {
     let course_id = path.into_inner();
+    log::debug!("Generating QR code for course ID: {}", course_id);
 
-    // Generate URL for attendance page
-    let local_ip =
-        local_ip().unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
+    // Validate course exists
+    course_db::fetch_course_by_id(&state.db_pool, course_id).await?; // This returns error if not found
 
-    // Build the URL with the local IP and course ID
-    let attendance_url = format!(
-        "http://{}:{}/attendance?course={}",
-        local_ip, config.port, course_id
-    );
+    // Determine base URL using utility function
+    let base_url = utils::get_server_url(&state.config)
+        .ok_or_else(|| AppError::InternalError(anyhow::anyhow!("Could not determine server base URL")))?;
 
-    // Generate QR code
-    let qr_data = qrcode_service.generate_qr(&attendance_url)?;
+    let attendance_url = format!("{}/attendance?course={}", base_url, course_id);
+    log::debug!("QR Code URL: {}", attendance_url);
 
-    // Return QR code as PNG image
+
+    let code = QrCode::new(attendance_url.as_bytes())
+        .map_err(|e| AppError::InternalError(anyhow::anyhow!("QR Code generation error: {}", e)))?;
+
+    let image = code.render::<Luma<u8>>().build();
+
+    let mut buffer = Vec::new();
+    let mut writer = Cursor::new(&mut buffer);
+
+    image
+        .write_to(&mut writer, ImageFormat::Png)
+        .map_err(AppError::ImageError)?; // Convert image error
+
     Ok(HttpResponse::Ok()
         .content_type("image/png")
-        .insert_header((header::CACHE_CONTROL, "no-cache"))
-        .body(qr_data))
+        .body(buffer))
+}
+
+// Public configuration function
+pub fn config_public(cfg: &mut web::ServiceConfig) {
+    cfg.service(generate_qr_code);
 }
