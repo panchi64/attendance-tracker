@@ -48,11 +48,23 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let connection_info = req.connection_info().clone();
         let remote_addr = connection_info.realip_remote_addr();
+        let peer_addr = req.peer_addr();
 
-        // Check if connection is from localhost
+        // More comprehensive localhost check
         let is_localhost = remote_addr.is_some_and(|ip_str| {
-            ip_str == "127.0.0.1" || ip_str == "::1" || ip_str.starts_with("localhost")
+            ip_str == "127.0.0.1"
+                || ip_str == "::1"
+                || ip_str.starts_with("localhost")
+                || ip_str == "0.0.0.0"
+                || ip_str.starts_with("0:0:0:0:")
         });
+
+        log::debug!(
+            "HostOnly middleware: remote_addr={:?}, peer_addr={:?}, is_localhost={}",
+            remote_addr,
+            peer_addr,
+            is_localhost
+        );
 
         // Allow access from localhost
         if is_localhost {

@@ -211,3 +211,47 @@ pub async fn get_course_by_id_handler_public(
     let course = course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
     Ok(HttpResponse::Ok().json(CourseApiResponse::from(course)))
 }
+
+// Public version of create_course_handler
+pub async fn create_course_handler_public(
+    state: web::Data<AppState>,
+    payload: web::Json<CreateCoursePayload>,
+) -> Result<impl Responder, AppError> {
+    log::info!(
+        "Attempting to create course (public endpoint): {}",
+        payload.name
+    );
+
+    // For debugging
+    log::debug!("Payload received: {:?}", payload);
+
+    let created_course = course_db::create_course(&state.db_pool, &payload).await?;
+    log::info!("Successfully created course ID: {}", created_course.id);
+
+    // If this is the first course created, set it as current
+    if pref_db::get_current_course_id(&state.db_pool)
+        .await?
+        .is_none()
+    {
+        log::info!(
+            "Setting newly created course {} as current.",
+            created_course.id
+        );
+        pref_db::set_current_course_id(&state.db_pool, created_course.id).await?;
+    }
+
+    Ok(HttpResponse::Created().json(CourseApiResponse::from(created_course)))
+}
+
+// Public version of update_course_handler
+pub async fn update_course_handler_public(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+    payload: web::Json<UpdateCoursePayload>,
+) -> Result<impl Responder, AppError> {
+    let course_id = path.into_inner();
+    log::info!("Attempting to update course ID (public): {}", course_id);
+    let updated_course = course_db::update_course(&state.db_pool, course_id, &payload).await?;
+    log::info!("Successfully updated course ID: {}", course_id);
+    Ok(HttpResponse::Ok().json(CourseApiResponse::from(updated_course)))
+}

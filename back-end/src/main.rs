@@ -306,19 +306,27 @@ async fn main() -> IoResult<()> {
                 web::scope("/api")
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
-                    // Add some endpoints that should be accessible but protected
+                    // Courses endpoints grouped by resource
                     .service(
                         web::resource("/courses")
-                            .route(web::get().to(api::courses::get_courses_handler_public)),
+                            .route(web::get().to(api::courses::get_courses_handler_public))
+                            .route(web::post().to(api::courses::create_course_handler_public)),
                     )
                     .service(
                         web::resource("/courses/{id}")
-                            .route(web::get().to(api::courses::get_course_by_id_handler_public)),
+                            .route(web::get().to(api::courses::get_course_by_id_handler_public))
+                            .route(web::put().to(api::courses::update_course_handler_public)),
                     )
+                    // Preferences endpoints grouped by resource
                     .service(
-                        web::resource("/ws/{course_id}")
-                            .route(web::get().to(api::ws::ws_index_public)),
-                    ),
+                        web::resource("/preferences")
+                            .route(web::get().to(api::preferences::get_preferences_handler_public))
+                            .route(
+                                web::post().to(api::preferences::update_preferences_handler_public),
+                            ),
+                    )
+                    // WebSocket endpoint
+                    .route("/ws/{course_id}", web::get().to(api::ws::ws_index_public)),
             )
             // --- Static File Serving ---
             .service(Files::new("/uploads", "../public/uploads").show_files_listing())
