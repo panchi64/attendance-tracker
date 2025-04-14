@@ -1,5 +1,5 @@
 use crate::{
-    db::courses as course_db, // Use alias
+    db::courses as course_db,
     errors::AppError,
 };
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDateTime, Utc};
@@ -24,7 +24,6 @@ pub async fn generate_and_store_code(
         .collect::<String>()
         .to_uppercase();
 
-    // Safely convert std::time::Duration to chrono::Duration
     let chrono_validity = ChronoDuration::from_std(validity_duration)
         .map_err(|e| sqlx::Error::Protocol(format!("Invalid duration conversion: {}", e)))?;
     let expires_at_utc = Utc::now() + chrono_validity;

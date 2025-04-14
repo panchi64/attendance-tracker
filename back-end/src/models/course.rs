@@ -49,10 +49,6 @@ pub struct UpdateCoursePayload {
     pub logo_path: String,
 }
 
-// Structure for API responses (often same as Course, but could be tailored)
-// For simplicity, we'll reuse Course for now.
-// pub type CourseResponse = Course;
-
 // Helper to convert Vec<String> to JsonValue for DB storage
 pub fn vec_string_to_json(sections: &[String]) -> JsonValue {
     serde_json::to_value(sections).unwrap_or(JsonValue::Array(vec![]))

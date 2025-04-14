@@ -8,9 +8,7 @@ pub struct Preference {
     pub value: String,
 }
 
-// Structure for API request (POST /api/preferences) - Simplified
-// Frontend sends { current_course: courseName } or full PrefsStore
-// Let's handle setting the current course ID. Frontend should send ID now.
+// Structure for API request (POST /api/preferences)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SetCurrentCoursePayload {
     pub current_course_id: String, // Expecting UUID string
@@ -20,7 +18,7 @@ pub struct SetCurrentCoursePayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PreferencesResponse {
     pub current_course_id: Option<String>, // UUID string
-    // Add other global preferences here if needed
+                                           // Add other global preferences here if needed
 }
 
 // Structure for Switch Course API Request (POST /api/courses/switch)

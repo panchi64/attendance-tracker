@@ -1,6 +1,4 @@
-use crate::config::Config; // Make sure Config is accessible
-
-pub mod time; // Keep if you add time utils
+use crate::config::Config;
 
 // Helper to determine the base URL the server is accessible at
 // Needed for QR codes, potentially other links.
