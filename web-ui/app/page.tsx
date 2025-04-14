@@ -593,22 +593,7 @@ export default function Dashboard() {
   // --- Handler Functions ---
   const handleLogoChange = useCallback((newLogoPath: string) => {
     dispatch({ type: 'SET_LOGO_PATH', payload: newLogoPath });
-    
-    // Force refresh of confirmation code after logo change
-    if (state.courseId) {
-      console.log("Logo updated, refreshing confirmation code");
-      fetchConfirmationCode(state.courseId)
-        .then(codeData => {
-          if (codeData) {
-            dispatch({ type: 'SET_CONFIRMATION_CODE', payload: codeData.code });
-            dispatch({ type: 'SET_CODE_PROGRESS', payload: calculateProgress(codeData.expires_in_seconds) });
-          }
-        })
-        .catch(error => {
-          console.error('Error refreshing confirmation code after logo update:', error);
-        });
-    }
-  }, [state.courseId]);
+  }, []);
 
   const addNewSection = useCallback(() => {
     const newSection = window.prompt("Enter new section number (e.g., 003):")?.trim();

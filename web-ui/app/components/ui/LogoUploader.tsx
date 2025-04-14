@@ -114,19 +114,12 @@ const LogoUploader = ({
             {/* Logo image */}
             <div className="w-32 h-32 relative">
                 <Image
-                    src={logoPath.startsWith('http') ? logoPath : `${process.env.NEXT_PUBLIC_BASE_URL || ''}${logoPath}`}
+                    src={logoPath}
                     alt="University Logo"
                     width={128}
                     height={128}
                     className="object-contain"
                     priority
-                    onError={(e) => {
-                        console.error(`Failed to load image from path: ${logoPath}`);
-                        // Fall back to default logo if the custom one fails to load
-                        if (logoPath !== defaultLogoPath) {
-                            setLogoPath(defaultLogoPath);
-                        }
-                    }}
                 />
 
                 {/* Loading overlay */}
