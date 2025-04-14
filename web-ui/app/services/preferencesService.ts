@@ -363,12 +363,40 @@ export const saveCoursePreferences = async (coursePreferences: CoursePreferences
  * Get list of available courses (ID and Name only)
  */
 export const getAvailableCourses = async (): Promise<Array<{ id: string, name: string; }>> => {
+    console.log("Fetching available courses from backend");
     try {
-        const response = await fetch('/api/courses');
+        const response = await fetch('/api/courses', {
+            method: 'GET',
+            headers: { 
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        });
+        
         if (!response.ok) {
-            throw new Error(`Failed to fetch courses (${response.status})`);
+            const errorText = await response.text().catch(() => 'Unknown error');
+            console.error(`Failed to fetch courses: Status ${response.status}, Response: ${errorText}`);
+            throw new Error(`Failed to fetch courses (${response.status}): ${errorText}`);
         }
-        const backendCourses = await response.json() as BackendCourse[];
+        
+        const responseText = await response.text();
+        console.log(`Raw response from /api/courses: ${responseText}`);
+        
+        let backendCourses: BackendCourse[];
+        try {
+            backendCourses = JSON.parse(responseText) as BackendCourse[];
+        } catch (parseError) {
+            console.error('Error parsing courses response:', parseError);
+            console.error('Response that failed to parse:', responseText);
+            return [];
+        }
+        
+        if (!Array.isArray(backendCourses)) {
+            console.error('Courses response is not an array:', backendCourses);
+            return [];
+        }
+        
+        console.log(`Successfully fetched ${backendCourses.length} courses:`, backendCourses.map(c => c.name));
         return backendCourses.map(course => ({ id: course.id, name: course.name }));
     } catch (error) {
         console.error('Error fetching available courses:', error instanceof Error ? error.message : String(error));

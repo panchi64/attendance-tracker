@@ -432,25 +432,32 @@ export default function Dashboard() {
     async function loadInitialData() {
       if (!isMounted) return;
       console.log("Effect: Loading initial course preferences...");
+      dispatch({ type: 'SET_LOADING', payload: true });
 
       try {
+        // Load available courses first to ensure we have the complete list
+        console.log("Effect: Loading available courses...");
+        const courses = await getAvailableCourses();
+        
+        if (!isMounted) return;
+        console.log(`Effect: Loaded ${courses.length} available courses:`, courses);
+        
+        if (courses.length === 0) {
+          console.warn("No courses returned from backend, may need to create one");
+        }
+        
+        dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+
+        // Then load the current course preferences
         const currentPrefs = await loadCurrentCoursePreferences();
 
         if (!isMounted) return;
-        console.log("Effect: Loaded preferences:", currentPrefs);
+        console.log("Effect: Loaded current course preferences:", currentPrefs);
 
         dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
 
         // Initialize saved ref *after* successful load/init
         prevSavedPrefsJsonRef.current = JSON.stringify(currentPrefs);
-
-        console.log("Effect: Loading available courses...");
-        const courses = await getAvailableCourses();
-
-        if (!isMounted) return;
-        console.log("Effect: Loaded available courses:", courses);
-
-        dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
       } catch (error) {
         if (!isMounted) return;
         console.error('Effect: Error loading initial data:', error);
@@ -461,8 +468,7 @@ export default function Dashboard() {
       }
     }
 
-    // Only run fetch if initial state indicates no valid course ID was found (or always run to refresh?)
-    // Let's always run to ensure we sync with backend state on load.
+    // Load initial data on component mount
     loadInitialData();
     return () => { isMounted = false; };
   }, []);
@@ -631,11 +637,22 @@ export default function Dashboard() {
     dispatch({ type: 'SET_ERROR', payload: null });
     dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
     try {
+      // First update the current course
       const coursePrefs = await switchCourse(selectedCourseId);
-      if (coursePrefs) {
-        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: coursePrefs });
-        prevSavedPrefsJsonRef.current = JSON.stringify(coursePrefs); // Update saved ref
-      } else { throw new Error("Failed to load details for the selected course."); }
+      if (!coursePrefs) {
+        throw new Error("Failed to load details for the selected course.");
+      }
+      
+      // Then refresh the list of available courses to ensure it's up to date
+      console.log("Refreshing available courses after course switch");
+      const courses = await getAvailableCourses();
+      
+      // Update both the course preferences and available courses in state
+      dispatch({ type: 'INITIALIZE_PREFERENCES', payload: coursePrefs });
+      dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+      
+      // Update saved reference
+      prevSavedPrefsJsonRef.current = JSON.stringify(coursePrefs);
     } catch (error) {
       console.error('Error switching course:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Failed to switch course.' });
@@ -644,7 +661,13 @@ export default function Dashboard() {
         const lastGoodPrefs = await loadCurrentCoursePreferences();
         dispatch({ type: 'INITIALIZE_PREFERENCES', payload: lastGoodPrefs });
         prevSavedPrefsJsonRef.current = JSON.stringify(lastGoodPrefs);
-      } catch (reloadError) { console.error("Failed reload after switch error:", reloadError); }
+        
+        // Also reload available courses
+        const courses = await getAvailableCourses();
+        dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+      } catch (reloadError) { 
+        console.error("Failed reload after switch error:", reloadError); 
+      }
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }

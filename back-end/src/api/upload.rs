@@ -1,20 +1,33 @@
 use actix_multipart::Multipart;
-use actix_web::{HttpResponse, Responder, post, web};
+use actix_web::{HttpResponse, Responder, post, web, HttpRequest};
 use futures_util::TryStreamExt;
 use std::{fs, io::Write};
 use uuid::Uuid;
 
-use crate::{AppState, errors::AppError};
+use crate::{AppState, errors::AppError, db::courses};
 
-// Basic stub - Needs improvement (error handling, file naming, path validation)
 #[post("/upload-logo")]
 async fn upload_logo_handler(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
+    req: HttpRequest,
     mut payload: Multipart,
 ) -> Result<impl Responder, AppError> {
     log::info!("Receiving logo upload request");
+    
+    // Extract course ID from header
+    let course_id_header = req.headers().get("X-Course-ID")
+        .ok_or_else(|| AppError::BadClientData("Missing X-Course-ID header".to_string()))?;
+    
+    let course_id_str = course_id_header.to_str()
+        .map_err(|_| AppError::BadClientData("Invalid course ID format in header".to_string()))?;
+    
+    let course_id = Uuid::parse_str(course_id_str)
+        .map_err(|_| AppError::BadClientData("Invalid UUID format for course ID".to_string()))?;
+    
+    // Verify course exists
+    let _ = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
 
-    let uploads_dir = "../public/uploads/logos";
+    let uploads_dir = "public/uploads/logos";
     fs::create_dir_all(uploads_dir)?; // Ensure the directory exists
 
     let mut _file_path_on_server: Option<String> = None;
@@ -59,16 +72,26 @@ async fn upload_logo_handler(
     if let Some(name) = saved_filename {
         // Construct the URL path
         let url_path = format!("/uploads/logos/{}", name);
+        
+        // Create a minimal UpdateCoursePayload to update just the logo_path
+        let course = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
+        let mut payload = crate::models::course::UpdateCoursePayload {
+            name: course.name.clone(),
+            section_number: course.section_number.clone(),
+            sections: course.sections.as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+            professor_name: course.professor_name.clone(),
+            office_hours: course.office_hours.clone(),
+            news: course.news.clone(),
+            total_students: course.total_students,
+            logo_path: url_path.clone(),
+        };
+        
+        // Update the course with the new logo path
+        let updated_course = courses::update_course(&state.db_pool, course_id, &payload).await?;
 
-        // TODO: Associate this url_path with the current course in the database
-        // Need the current course ID here! This might need adjustment.
-        // let current_course_id = pref_db::get_current_course_id(&state.db_pool).await?
-        //     .ok_or(AppError::BadClientData("No current course selected to associate logo with".to_string()))?;
-        // course_db::update_logo_path(&state.db_pool, current_course_id, &url_path).await?;
-        log::warn!(
-            "Logo upload successful, URL path is '{}'. DB update not yet implemented.",
-            url_path
-        );
+        log::info!("Logo upload successful, updated course {} with logo path: {}", course_id, url_path);
 
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
