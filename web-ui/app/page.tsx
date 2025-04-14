@@ -187,11 +187,15 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
         : [...state.sections, action.payload].sort();
       return { ...state, sectionNumber: action.payload, sections: newSections };
     case 'SET_SECTIONS':
-      const currentSectionValid = action.payload.includes(state.sectionNumber);
+      // Filter out the default '000' section if other sections are being added
+      const filteredSections = action.payload.length > 1 && action.payload.includes('000')
+        ? action.payload.filter(section => section !== '000')
+        : action.payload;
+      const currentSectionValid = filteredSections.includes(state.sectionNumber);
       return {
         ...state,
-        sections: action.payload.sort(),
-        sectionNumber: currentSectionValid ? state.sectionNumber : (action.payload[0] || "000")
+        sections: filteredSections.sort(),
+        sectionNumber: currentSectionValid ? state.sectionNumber : (filteredSections[0] || "000")
       };
     case 'SET_PROFESSOR_NAME':
       return { ...state, professorName: action.payload };
@@ -598,8 +602,13 @@ export default function Dashboard() {
   const addNewSection = useCallback(() => {
     const newSection = window.prompt("Enter new section number (e.g., 003):")?.trim();
     if (newSection && !state.sections.includes(newSection)) {
-      const updatedSections = [...state.sections, newSection].sort();
-      dispatch({ type: 'SET_SECTIONS', payload: updatedSections });
+      // Create an array with the new section and filter out "000" if it exists and there will be multiple sections
+      const updatedSections = [...state.sections, newSection];
+      const filteredSections = updatedSections.length > 1 && updatedSections.includes('000')
+        ? updatedSections.filter(section => section !== '000')
+        : updatedSections;
+      
+      dispatch({ type: 'SET_SECTIONS', payload: filteredSections });
       dispatch({ type: 'SET_SECTION_NUMBER', payload: newSection });
     }
     dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
