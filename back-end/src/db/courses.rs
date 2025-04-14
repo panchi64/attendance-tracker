@@ -94,16 +94,28 @@ pub async fn update_course(
 ) -> Result<Course, AppError> {
     let sections_json = vec_string_to_json(&payload.sections);
 
-    // First, check if the course exists
-    fetch_course_by_id(pool, id).await?;
+    // First, check if the course exists and get its current confirmation code data
+    let existing_course = fetch_course_by_id(pool, id).await?;
 
     let course = sqlx::query_as!(
         Course,
         r#"
         UPDATE courses
-        SET name = $1, section_number = $2, sections = $3, professor_name = $4, office_hours = $5, news = $6, total_students = $7, logo_path = $8
+        SET name = $1, 
+            section_number = $2, 
+            sections = $3, 
+            professor_name = $4, 
+            office_hours = $5, 
+            news = $6, 
+            total_students = $7, 
+            logo_path = $8,
+            /* Preserve confirmation_code and confirmation_code_expires_at */
+            confirmation_code = $10,
+            confirmation_code_expires_at = $11
         WHERE id = $9
-        RETURNING id as "id: Uuid", name, section_number, sections as "sections: sqlx::types::JsonValue", professor_name, office_hours, news, total_students, logo_path, confirmation_code, confirmation_code_expires_at, created_at, updated_at
+        RETURNING id as "id: Uuid", name, section_number, sections as "sections: sqlx::types::JsonValue", 
+                 professor_name, office_hours, news, total_students, logo_path, 
+                 confirmation_code, confirmation_code_expires_at, created_at, updated_at
         "#,
         payload.name,
         payload.section_number,
@@ -113,7 +125,9 @@ pub async fn update_course(
         payload.news,
         payload.total_students,
         payload.logo_path,
-        id
+        id,
+        existing_course.confirmation_code,
+        existing_course.confirmation_code_expires_at
     )
         .fetch_one(pool)
         .await
