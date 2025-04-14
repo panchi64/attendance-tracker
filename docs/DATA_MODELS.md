@@ -7,23 +7,23 @@ This document describes the data models used in the Attendance Tracker applicati
 The application uses SQLite as its database engine. Here's a diagram of the database schema:
 
 ```
-┌────────────────────────┐       ┌───────────────────────────┐
-│        courses         │       │     attendance_records    │
-├────────────────────────┤       ├───────────────────────────┤
-│ id (TEXT, PK)          │       │ id (INTEGER, PK)          │
-│ name (TEXT)            │       │ course_id (TEXT, FK)      │◄─────┐
-│ section_number (TEXT)  │       │ student_name (TEXT)       │      │
-│ sections (JSON)        │       │ student_id (TEXT)         │      │
-│ professor_name (TEXT)  │       │ timestamp (DATETIME)      │      │
-│ office_hours (TEXT)    │       │ attendance_date (TEXT)    │      │
-│ news (TEXT)            │       └───────────────────────────┘      │
-│ total_students (INT)   │                                          │
-│ logo_path (TEXT)       │                                          │
-│ confirmation_code (TEXT)    ┌───────────────────────────┐      │
-│ confirmation_code_expires_at│       │ device_submissions       │      │
-│ created_at (DATETIME)  │       ├───────────────────────────┤      │
-│ updated_at (DATETIME)  │◄──────┤ id (INTEGER, PK)          │      │
-└────────────────────────┘       │ course_id (TEXT, FK)      │◄─────┘
+┌─────────────────────────────┐  ┌───────────────────────────┐
+│        courses              │  │     attendance_records    │
+├─────────────────────────────┤  ├───────────────────────────┤
+│ id (TEXT, PK)               │  │ id (INTEGER, PK)          │
+│ name (TEXT)                 │  │ course_id (TEXT, FK)      │◄─────┐
+│ section_number (TEXT)       │  │ student_name (TEXT)       │      │
+│ sections (JSON)             │  │ student_id (TEXT)         │      │
+│ professor_name (TEXT)       │  │ timestamp (DATETIME)      │      │
+│ office_hours (TEXT)         │  │ attendance_date (TEXT)    │      │
+│ news (TEXT)                 │  └───────────────────────────┘      │
+│ total_students (INT)        │                                     │
+│ logo_path (TEXT)            │                                     │
+│ confirmation_code (TEXT)    │  ┌───────────────────────────┐      │
+│ confirmation_code_expires_at│  │ device_submissions        │      │
+│ created_at (DATETIME)       │  ├───────────────────────────┤      │
+│ updated_at (DATETIME)       │◄─┤ id (INTEGER, PK)          │      │
+└─────────────────────────────┘  │ course_id (TEXT, FK)      │◄─────┘
                                  │ ip_address (TEXT)         │
                                  │ submission_date (TEXT)    │
 ┌────────────────────────┐       └───────────────────────────┘
