@@ -307,6 +307,8 @@ async fn main() -> IoResult<()> {
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
                     .configure(api::confirmation_codes::config)
+                    // Add upload logo handler to public API scope
+                    .configure(api::upload::config)
                     // Courses endpoints grouped by resource
                     .service(
                         web::resource("/courses")
