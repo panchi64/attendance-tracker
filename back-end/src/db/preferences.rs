@@ -43,5 +43,3 @@ pub async fn get_current_course_id(pool: &SqlitePool) -> Result<Option<Uuid>, Ap
         _ => Ok(None), // No preference set or value is empty
     }
 }
-
-// Add functions for other preferences if needed
