@@ -191,7 +191,9 @@ const CourseContext = createContext<CourseContextType | null>(null);
 
 // Provider component
 export const CourseProvider = ({ children }: { children: ReactNode; }) => {
-  const [state, dispatch] = useReducer(courseReducer, getInitialState());
+  // Use useMemo to ensure consistent state initialization across renders to avoid hydration issues
+  const initialState = useMemo(() => getInitialState(), []);
+  const [state, dispatch] = useReducer(courseReducer, initialState);
   const prevSavedPrefsJsonRef = useRef<string>('');
 
   // Memoize the current state suitable for saving

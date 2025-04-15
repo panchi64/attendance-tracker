@@ -13,6 +13,7 @@ export function useAttendanceWebSocket(courseId: string | null, onMessage: (coun
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
+  const lastConnectionAttemptRef = useRef<number>(0);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,20 +35,53 @@ export function useAttendanceWebSocket(courseId: string | null, onMessage: (coun
     const connectWebSocket = () => {
       if (!isMounted) return;
 
+      // Add protection against rapid reconnection cycles
+      const now = Date.now();
+      const minTimeBetweenAttempts = 1000; // 1 second minimum between connection attempts
+
+      if (now - lastConnectionAttemptRef.current < minTimeBetweenAttempts) {
+        console.warn("WS: Attempted to reconnect too quickly, delaying connection");
+
+        // Force a delay before the next connection attempt
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (isMounted) {
+            lastConnectionAttemptRef.current = Date.now();
+            connectWebSocket();
+          }
+        }, minTimeBetweenAttempts);
+
+        return;
+      }
+
+      lastConnectionAttemptRef.current = now;
+
       // Close existing connection if any
       wsRef.current?.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
 
       // Determine WebSocket URL - try the non-host version first
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws/${courseId}`;
+      // Use the host address directly from the window.location to avoid any potential URL formation issues
+      const baseUrl = `${window.location.hostname}:${window.location.port}`;
+      const wsUrl = `${wsProtocol}//${baseUrl}/api/ws/${courseId}`;
       console.log("WS: Connecting to:", wsUrl);
 
       try {
         wsRef.current = new WebSocket(wsUrl);
 
+        // Set a connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+            console.warn("WS: Connection timeout, closing socket");
+            wsRef.current.close();
+          }
+        }, 10000); // 10 second connection timeout
+
         wsRef.current.onopen = () => {
           if (!isMounted) return;
+          clearTimeout(connectionTimeout);
           console.log('WS: WebSocket connected for course:', courseId);
           setIsConnected(true);
           setError(null);
@@ -69,6 +103,7 @@ export function useAttendanceWebSocket(courseId: string | null, onMessage: (coun
 
         wsRef.current.onerror = (event) => {
           if (!isMounted) return;
+          clearTimeout(connectionTimeout);
           console.error('WS: WebSocket error:', event);
           setError('Connection error. Attempting to reconnect...');
           setIsConnected(false);
@@ -77,6 +112,7 @@ export function useAttendanceWebSocket(courseId: string | null, onMessage: (coun
 
         wsRef.current.onclose = (event) => {
           if (!isMounted) return;
+          clearTimeout(connectionTimeout);
           console.log('WS: WebSocket connection closed.', event.reason);
           setIsConnected(false);
 

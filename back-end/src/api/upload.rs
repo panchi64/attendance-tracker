@@ -52,14 +52,29 @@ async fn upload_logo_handler(
                 let unique_filename = format!("{}.{}", Uuid::new_v4(), extension);
                 let server_path = format!("{}/{}", uploads_dir, unique_filename);
 
+                // Also save to the root project public directory to ensure immediate availability
+                let root_public_path = "../public/uploads/logos";
+                fs::create_dir_all(root_public_path)?; // Ensure the directory exists
+                let public_path = format!("{}/{}", root_public_path, unique_filename);
+
                 _file_path_on_server = Some(server_path.clone());
                 saved_filename = Some(unique_filename); // Store just the filename for the URL path
 
                 // Create file and write stream data
-                let mut f = web::block(|| std::fs::File::create(server_path)).await??;
+                let mut f = web::block(move || std::fs::File::create(&server_path)).await??;
+                let mut file_data = Vec::new();
+                
+                // Read all chunks into memory first
                 while let Some(chunk) = field.try_next().await? {
+                    file_data.extend_from_slice(&chunk);
                     f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
                 }
+                
+                // Save a copy to the public directory
+                let public_path_clone = public_path.clone();
+                let file_data_clone = file_data.clone();
+                web::block(move || std::fs::write(public_path_clone, file_data_clone)).await??;
+
                 log::info!(
                     "Successfully saved uploaded file to: {}",
                     _file_path_on_server.as_ref().unwrap()
@@ -75,7 +90,7 @@ async fn upload_logo_handler(
         
         // Create a minimal UpdateCoursePayload to update just the logo_path
         let course = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
-        let mut payload = crate::models::course::UpdateCoursePayload {
+        let payload = crate::models::course::UpdateCoursePayload {
             name: course.name.clone(),
             section_number: course.section_number.clone(),
             sections: course.sections.as_array()
@@ -89,7 +104,7 @@ async fn upload_logo_handler(
         };
         
         // Update the course with the new logo path
-        let updated_course = courses::update_course(&state.db_pool, course_id, &payload).await?;
+        let _updated_course = courses::update_course(&state.db_pool, course_id, &payload).await?;
 
         log::info!("Logo upload successful, updated course {} with logo path: {}", course_id, url_path);
 

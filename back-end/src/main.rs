@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 use std::io::Result as IoResult;
 use std::path::Path;
 use std::time::Duration;
+use std::fs;
 use uuid::Uuid;
 
 mod api;
@@ -201,6 +202,13 @@ async fn main() -> IoResult<()> {
         .await
         .expect("Failed to run database migrations");
     log::info!("Database migrations completed.");
+
+    // Create necessary directories for uploads
+    let uploads_dir = Path::new("../public/uploads/logos");
+    if !uploads_dir.exists() {
+        log::info!("Creating uploads directory: {}", uploads_dir.display());
+        fs::create_dir_all(uploads_dir).expect("Failed to create uploads directory");
+    }
 
     // --- Seed Initial Data ---
     if let Err(e) = seed_initial_data(&pool).await {
