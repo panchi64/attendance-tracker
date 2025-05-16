@@ -15,7 +15,7 @@ export default function AttendanceForm() {
 
     // Error handling states
     const [error, setError] = useState('');
-    const [errorType, setErrorType] = useState<'validation' | 'api' | 'expired' | 'invalid' | 'conflict' | 'device' | ''>('');
+    const [errorType, setErrorType] = useState<'validation' | 'api' | 'expired' | 'invalid' | 'conflict' | 'device' | 'course_not_active' | ''>('');
 
     // Current time
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -72,6 +72,8 @@ export default function AttendanceForm() {
                     } else {
                         throw new Error('STUDENT_ALREADY_SUBMITTED');
                     }
+                } else if (response.status === 403) { // Forbidden for CourseNotActive
+                    throw new Error('COURSE_NOT_ACTIVE');
                 } else if (data.message.includes('expired')) {
                     throw new Error('CODE_EXPIRED');
                 } else if (data.message.includes('invalid')) {
@@ -91,19 +93,22 @@ export default function AttendanceForm() {
             if (err instanceof Error) {
                 // Handle different error types
                 if (err.message === 'CODE_EXPIRED') {
-                    setError('The confirmation code has expired. Please request a new code from your professor.');
+                    setError('The confirmation code has expired. Please ask your professor for the current code.');
                     setErrorType('expired');
                 } else if (err.message === 'INVALID_CODE') {
-                    setError('Invalid confirmation code. Please check and try again.');
+                    setError('The confirmation code you entered was incorrect. Please double-check it and try again.');
                     setErrorType('invalid');
                 } else if (err.message === 'DEVICE_ALREADY_SUBMITTED') {
-                    setError('This device has already been used to mark attendance for this course today.');
+                    setError('Attendance has already been submitted from this device for this course session.');
                     setErrorType('device');
                 } else if (err.message === 'STUDENT_ALREADY_SUBMITTED') {
-                    setError('This student ID has already been marked present for this course today.');
+                    setError('This student ID has already been marked as present for this course session.');
                     setErrorType('conflict');
+                } else if (err.message === 'COURSE_NOT_ACTIVE') {
+                    setError('Attendance can only be submitted for the course currently active with the instructor. Please check the main screen or try again shortly.');
+                    setErrorType('course_not_active');
                 } else {
-                    setError('Failed to submit attendance. Please try again.');
+                    setError('An unexpected error occurred while submitting your attendance. Please try again. If the problem persists, contact support.');
                     setErrorType('api');
                 }
             }
@@ -159,7 +164,8 @@ export default function AttendanceForm() {
                     <div className={`border px-4 py-3 rounded-md relative mb-6 ${errorType === 'validation' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
                         errorType === 'expired' ? 'bg-orange-50 border-orange-400 text-orange-800' :
                             errorType === 'conflict' || errorType === 'device' ? 'bg-red-50 border-red-400 text-red-800' :
-                                'bg-red-50 border-red-400 text-red-800'
+                                errorType === 'course_not_active' ? 'bg-yellow-50 border-yellow-400 text-yellow-800' :
+                                    'bg-red-50 border-red-400 text-red-800'
                         }`}>
                         <div className="flex items-center">
                             <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">

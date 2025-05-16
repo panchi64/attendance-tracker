@@ -25,6 +25,9 @@ pub enum AppError {
     #[error("Expired Confirmation Code")]
     ExpiredCode,
 
+    #[error("Course Not Active: {0}")]
+    CourseNotActive(String),
+
     #[error("Conflict: {0}")]
     Conflict(String), // e.g., Course name already exists
 
@@ -115,6 +118,7 @@ impl ResponseError for AppError {
             AppError::BadClientData(_) => StatusCode::BAD_REQUEST,
             AppError::InvalidCode => StatusCode::BAD_REQUEST,
             AppError::ExpiredCode => StatusCode::BAD_REQUEST,
+            AppError::CourseNotActive(_) => StatusCode::FORBIDDEN,
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -127,6 +131,7 @@ impl ResponseError for AppError {
             AppError::BadClientData(message) => ("bad_request", message.clone()),
             AppError::InvalidCode => ("invalid_code", "Invalid confirmation code.".to_string()),
             AppError::ExpiredCode => ("expired_code", "Confirmation code has expired.".to_string()),
+            AppError::CourseNotActive(message) => ("course_not_active", message.clone()),
             AppError::Conflict(message) => ("conflict", message.clone()),
             AppError::MultipartError(message) => ("upload_error", message.clone()), // Provide multipart error message
             // Generic messages for internal errors - log the specific internal cause

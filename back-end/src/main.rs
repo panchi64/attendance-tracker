@@ -8,6 +8,7 @@ use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
 use std::io::Result as IoResult;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -30,6 +31,7 @@ pub struct AppState {
     db_pool: SqlitePool,
     config: Config,
     ws_server: actix::Addr<AttendanceServer>,
+    active_host_course_id: Arc<Mutex<Option<Uuid>>>,
 }
 
 async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
@@ -253,6 +255,17 @@ async fn main() -> IoResult<()> {
     let server_addr = format!("{}:{}", config.server_host, config.server_port);
     log::info!("Starting server at http://{}", server_addr);
 
+    let initial_active_course_id = db::preferences::get_current_course_id(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            log::warn!("Failed to get initial current_course_id for active_host_course_id: {}. Defaulting to None.", e);
+            None
+        });
+    log::info!(
+        "Initial active_host_course_id set to: {:?}",
+        initial_active_course_id
+    );
+
     let open_url = format!("http://localhost:{}", config.server_port);
 
     // Spawn task to open browser
@@ -272,6 +285,7 @@ async fn main() -> IoResult<()> {
         db_pool: pool.clone(),
         config: config.clone(),
         ws_server: ws_server.clone(),
+        active_host_course_id: Arc::new(Mutex::new(initial_active_course_id)),
     });
 
     HttpServer::new(move || {
