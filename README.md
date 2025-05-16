@@ -42,7 +42,7 @@ Attendance Tracker creates a locally accessible web server that students can con
 
 ## Screenshots
 
-![Dashboard Page](./readme-assets/image.jpeg)
+![Dashboard Page](./readme-assets/image.png)
 
 - Dashboard with real-time student count
 - QR code and confirmation code display
