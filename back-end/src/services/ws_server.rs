@@ -44,15 +44,13 @@ pub struct AttendanceServer {
     rooms: HashMap<Uuid, HashSet<Recipient<WsMessage>>>,
     // Map course_id to a map of session_id -> recipient for efficient disconnection
     sessions: HashMap<Uuid, HashMap<usize, Recipient<WsMessage>>>,
-    db_pool: SqlitePool, // Needed to fetch initial counts
 }
 
 impl AttendanceServer {
-    pub fn new(db_pool: SqlitePool) -> Self {
+    pub fn new(_db_pool: SqlitePool) -> Self {
         AttendanceServer {
             rooms: HashMap::new(),
             sessions: HashMap::new(),
-            db_pool,
         }
     }
 

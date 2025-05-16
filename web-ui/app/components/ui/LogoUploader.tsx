@@ -1,4 +1,4 @@
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import Image from 'next/image';
 import Pencil from '../icons/Pencil';
 
@@ -19,6 +19,20 @@ const LogoUploader = ({
     const [isHovering, setIsHovering] = useState<boolean>(false);
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Add useEffect to react to changes in defaultLogoPath prop
+    useEffect(() => {
+        // Update internal logoPath state if the defaultLogoPath prop changes
+        // and it's different from the current internal path.
+        // Also ensure defaultLogoPath is a valid string, otherwise stick to current or fallback.
+        if (defaultLogoPath && defaultLogoPath !== logoPath) {
+            setLogoPath(defaultLogoPath);
+        } else if (!defaultLogoPath && logoPath !== "/university-logo.png") {
+            // If defaultLogoPath becomes empty/null (e.g. no course selected or course has no logo),
+            // revert to a known default, but only if not already there.
+            setLogoPath("/university-logo.png");
+        }
+    }, [defaultLogoPath, logoPath]); // Re-run if defaultLogoPath or internal logoPath changes
 
     // Handle file upload
     const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {

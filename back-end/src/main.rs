@@ -6,10 +6,10 @@ use anyhow::Result as AnyhowResult;
 use dotenvy::dotenv;
 use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
+use std::fs;
 use std::io::Result as IoResult;
 use std::path::Path;
 use std::time::Duration;
-use std::fs;
 use uuid::Uuid;
 
 mod api;
@@ -41,11 +41,9 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
         .fetch_one(pool)
         .await?;
 
-    let mut default_id = Uuid::nil(); // Set a default value
-
     if course_count == 0 {
         log::info!("No courses found. Seeding default course...");
-        default_id = Uuid::new_v4();
+        let default_id = Uuid::new_v4();
         let default_name = "Default Course";
         let default_sections = vec!["000".to_string(), "001".to_string()];
         let sections_json = vec_string_to_json(&default_sections);
@@ -203,12 +201,12 @@ async fn main() -> IoResult<()> {
         .expect("Failed to run database migrations");
     log::info!("Database migrations completed.");
 
-    // Create necessary directories for uploads
-    let uploads_dir = Path::new("../public/uploads/logos");
-    if !uploads_dir.exists() {
-        log::info!("Creating uploads directory: {}", uploads_dir.display());
-        fs::create_dir_all(uploads_dir).expect("Failed to create uploads directory");
-    }
+    // Create necessary directories for uploads (This is now handled by the upload handler itself based on config.frontend_build_path)
+    // let uploads_dir = Path::new("../public/uploads/logos"); // Removed
+    // if !uploads_dir.exists() { // Removed
+    //     log::info!("Creating uploads directory: {}", uploads_dir.display()); // Removed
+    //     fs::create_dir_all(uploads_dir).expect("Failed to create uploads directory"); // Removed
+    // } // Removed
 
     // --- Seed Initial Data ---
     if let Err(e) = seed_initial_data(&pool).await {
@@ -340,7 +338,7 @@ async fn main() -> IoResult<()> {
                     .route("/ws/{course_id}", web::get().to(api::ws::ws_index_public)),
             )
             // --- Static File Serving ---
-            .service(Files::new("/uploads", "../public/uploads").show_files_listing())
+            // .service(Files::new("/uploads", "../public/uploads").show_files_listing()) // Removed specific /uploads handler
             .service(
                 Files::new("/", &config.frontend_build_path)
                     .index_file("index.html")
