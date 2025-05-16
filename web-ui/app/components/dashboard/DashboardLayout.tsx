@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useCourse } from '../../context/CourseContext';
 import { getAvailableCourses, loadCurrentCoursePreferences } from '../../services/preferencesService';
 import { useAttendanceWebSocket } from '../../hooks/useAttendanceWebSocket';
@@ -15,12 +15,16 @@ import Image from 'next/image';
 
 export default function DashboardLayout() {
   const { state, dispatch } = useCourse();
-  const [wsError] = useState<string | null>(null);
+
+  // Memoize the onMessage callback for the WebSocket hook
+  const handleWsMessage = useCallback((count: number) => {
+    dispatch({ type: 'SET_PRESENT_COUNT', payload: count });
+  }, [dispatch]);
 
   // WebSocket connection for attendance updates
   const { isConnected: isWsConnected, error: wsConnectionError } = useAttendanceWebSocket(
     state.courseId,
-    (count: number) => dispatch({ type: 'SET_PRESENT_COUNT', payload: count })
+    handleWsMessage
   );
 
   // QR Code URL
@@ -85,12 +89,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
-        {/* WebSocket Status Indicator */}
-        <div className={`text-xs px-2 py-0.5 text-white text-center ${isWsConnected ? 'bg-green-500' : 'bg-red-500'}`}>
-          {isWsConnected ? 'Real-time connection active' : (wsConnectionError || wsError || 'Real-time connection inactive')}
-        </div>
-
+      <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200 relative">
         {/* Error Display */}
         {state.error && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
@@ -135,6 +134,25 @@ export default function DashboardLayout() {
 
         {/* Footer Section */}
         <DashboardFooter />
+
+        {/* New WebSocket Status Indicator */}
+        <div
+          className={`
+            fixed bottom-4 right-4 
+            px-3 py-2 text-xs font-medium 
+            rounded-lg shadow-md border 
+            transition-all duration-300 ease-in-out 
+            ${isWsConnected
+              ? 'bg-green-50 border-green-400 text-green-700'
+              : 'bg-red-50 border-red-400 text-red-700'
+            }
+          `}
+        >
+          {isWsConnected
+            ? <span className="flex items-center"><span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>Connected</span>
+            : <span className="flex items-center"><span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>{wsConnectionError || 'Disconnected'}</span>
+          }
+        </div>
 
         {/* Loading Overlay - show when loading but we already have a courseId */}
         {state.isLoading && state.courseId && (
