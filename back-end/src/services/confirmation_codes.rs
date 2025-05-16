@@ -135,24 +135,29 @@ pub fn start_confirmation_code_generator(pool: SqlitePool, interval_duration: Du
 }
 
 // Function for the dashboard API to get the current code (if needed)
-// Not strictly necessary if WebSocket pushes the code, but useful for initial load.
 pub async fn get_current_code(
     pool: &SqlitePool,
     course_id: Uuid,
 ) -> Result<Option<(String, NaiveDateTime)>, AppError> {
-    let code_details = course_db::fetch_course_code_details(pool, course_id)
-        .await?
-        .ok_or_else(|| {
-            AppError::NotFound(format!(
-                "Course {} not found when getting current code",
-                course_id
-            ))
-        })?;
-
-    match code_details {
-        (Some(code), Some(expires_naive)) if expires_naive > Utc::now().naive_utc() => {
-            Ok(Some((code, expires_naive)))
+    // First check if the course exists
+    match course_db::fetch_course_by_id(pool, course_id).await {
+        Ok(_) => {
+            // Course exists, now get code details
+            let code_details = course_db::fetch_course_code_details(pool, course_id).await?;
+            
+            // If we have code details, check if the code is still valid
+            if let Some((Some(code), Some(expires_naive))) = code_details {
+                if expires_naive > Utc::now().naive_utc() {
+                    return Ok(Some((code, expires_naive)));
+                }
+            }
+            
+            // If we reach here, there's no valid code
+            Ok(None)
+        },
+        Err(e) => {
+            // If course doesn't exist, propagate the error
+            Err(e)
         }
-        _ => Ok(None), // Return None if code doesn't exist or is expired
     }
 }

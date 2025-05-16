@@ -33,7 +33,6 @@ async fn update_preferences_handler(
         AppError::BadClientData("Invalid current_course_id format. Expected UUID.".to_string())
     })?;
 
-    // Optional: Verify the course ID exists before setting it
     course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
 
     pref_db::set_current_course_id(&state.db_pool, course_id).await?;
@@ -41,6 +40,13 @@ async fn update_preferences_handler(
         "Successfully set current course ID preference to: {}",
         course_id
     );
+
+    // Update the active_host_course_id in AppState
+    {
+        let mut active_id = state.active_host_course_id.lock().unwrap();
+        *active_id = Some(course_id);
+        log::info!("AppState active_host_course_id updated to: {:?}", course_id);
+    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({"message": "Preferences updated successfully"})))
 }
@@ -71,7 +77,6 @@ pub async fn update_preferences_handler_public(
         AppError::BadClientData("Invalid current_course_id format. Expected UUID.".to_string())
     })?;
 
-    // Verify the course ID exists before setting it
     course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
 
     pref_db::set_current_course_id(&state.db_pool, course_id).await?;
@@ -79,6 +84,15 @@ pub async fn update_preferences_handler_public(
         "Successfully set current course ID preference to: {}",
         course_id
     );
+
+    {
+        let mut active_id = state.active_host_course_id.lock().unwrap();
+        *active_id = Some(course_id);
+        log::info!(
+            "AppState active_host_course_id updated via public endpoint to: {:?}",
+            course_id
+        );
+    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({"message": "Preferences updated successfully"})))
 }

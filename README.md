@@ -14,13 +14,15 @@ Attendance Tracker creates a locally accessible web server that students can con
 
 ## Key Features
 
-- **Course Management**: Create and switch between multiple courses
-- **Section Support**: Handle multiple sections per course
-- **Customization**: Change details like professor name, office hours, etc.
-- **Confirmation Codes**: Time-limited codes ensure attendance is taken only during class
-- **QR Code Access**: Easily accessible attendance form via QR code
-- **Local Network Restriction**: Prevents remote attendance marking
-- **CSV Export**: Export attendance data for gradebooks and LMS integration
+- **Course Management**: Create and switch between multiple courses, including custom logo uploads.
+- **Section Support**: Handle multiple sections per course.
+- **Customization**: Change details like professor name, office hours, and course news.
+- **Robust Confirmation Codes**: Time-limited codes ensure attendance is taken only during class for the _actively displayed course_.
+- **QR Code Access**: Easily accessible attendance form via QR code for the active course.
+- **Real-time Dashboard**: Live updates for student attendance count and connection status.
+- **Local Network Restriction**: Prevents remote attendance marking (by default, configurable host binding).
+- **CSV Export**: Export attendance data for gradebooks and LMS integration.
+- **Streamlined Build Process**: Includes a script (`run_full_app.sh`) to automate the full build and run process.
 
 ## Tech Stack
 
@@ -29,6 +31,7 @@ Attendance Tracker creates a locally accessible web server that students can con
 - **Next.js 15**: React-based framework for the user interface
 - **TailwindCSS**: Utility-first CSS framework for styling
 - **React 19**: UI component library
+- **Bun**: Fast JavaScript all-in-one toolkit (runtime, bundler, package manager)
 
 ### Backend
 
@@ -56,8 +59,9 @@ Attendance Tracker creates a locally accessible web server that students can con
 ### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) (1.75 or newer)
-- [Node.js](https://nodejs.org/) (18 or newer)
-- [npm](https://www.npmjs.com/) (9 or newer)
+- [Node.js](https://nodejs.org/) (18 or newer) - Primarily for `npx` if not using Bun for everything, or if specific global Node tools are needed.
+- [Bun](https://bun.sh/) (1.0 or newer) - Recommended for frontend development and running scripts.
+- [npm](https://www.npmjs.com/) (9 or newer) - Can be used if Bun is not available, though scripts are geared towards Bun.
 
 ### Backend Setup
 
@@ -65,8 +69,11 @@ Attendance Tracker creates a locally accessible web server that students can con
 # Navigate to backend directory
 cd back-end
 
-# Build and run the server
-cargo run --release
+# Build and run the server for development
+cargo run
+
+# For a release build (used by the full app script)
+# cargo build --release
 ```
 
 ### Frontend Setup
@@ -75,60 +82,89 @@ cargo run --release
 # Navigate to frontend directory
 cd web-ui
 
-# Install dependencies
-npm install
+# Install dependencies (using Bun is recommended)
+bun install
 
-# Build the frontend
-npm run build
+# Build the frontend (using Bun)
+bun run build
 
-# For development with hot reload
-npm run dev
+# For development with hot reload (using Bun)
+bun run dev
 ```
 
-### All-in-one Setup
+### All-in-one Setup (Recommended)
 
-When running the backend with `cargo run --release`, it will:
+The easiest way to build and run the entire application (frontend and backend bundled) is to use the provided script from the **root directory** of the project:
 
-1. Start the database
-2. Initialize the web server
-3. Serve the built frontend files
-4. Automatically open a browser to the application
+```bash
+# Ensure the script is executable
+chmod +x ./run_full_app.sh
+
+# Run the script
+./run_full_app.sh
+```
+
+This script will:
+
+1. Build the Next.js frontend for static export.
+2. Copy the built frontend assets to the location expected by the backend.
+3. Build the Rust backend in release mode.
+4. Launch the backend server, which will serve the frontend.
+5. Automatically attempt to open a browser to the application.
+
+Make sure you have an `.env` file configured at the root (you can copy `.env.example`).
 
 ## Project Structure
 
 ```
 attendance-tracker/
+├── .env.example           # Example environment variables
+├── .gitignore
+├── LICENSE.md
+├── README.md
+├── run_full_app.sh        # Script to build and run the entire application
 ├── back-end/              # Rust backend server
+│   ├── migrations/        # Database schema migrations
 │   ├── src/               # Source code
 │   │   ├── api/           # API endpoints
 │   │   ├── db/            # Database operations
+│   │   ├── errors/        # Error handling
+│   │   ├── middleware/    # Actix middleware
 │   │   ├── models/        # Data models
 │   │   ├── services/      # Business logic
 │   │   └── utils/         # Utility functions
+│   ├── static_frontend/   # Copied built frontend (generated, gitignored)
 │   └── Cargo.toml         # Rust dependencies
 ├── web-ui/                # Next.js frontend
 │   ├── app/               # Frontend application
-│   │   ├── attendance/    # Attendance form
-│   │   ├── components/    # Reusable components
-│   │   └── services/      # Frontend services
-│   ├── public/            # Static assets
-│   └── package.json       # JavaScript dependencies
-└── README.md              # Project documentation
+│   │   ├── attendance/    # Attendance form page
+│   │   ├── components/    # Reusable UI components (dashboard, ui, icons)
+│   │   ├── context/       # React context providers
+│   │   ├── hooks/         # Custom React hooks
+│   │   └── services/      # Frontend API services
+│   ├── public/            # Static assets (e.g., default images)
+│   ├── next.config.mjs    # Next.js configuration (ensure output: 'export')
+│   └── package.json       # JavaScript dependencies (managed with Bun)
+└── readme-assets/         # Images for README
 ```
 
-## Development
+## Development (Separate Terminals for Hot Reloading)
 
-For development, you can run both the frontend and backend separately:
+For a more iterative development experience with frontend hot-reloading:
 
 ```bash
 # Terminal 1 - Run the backend
 cd back-end
 cargo run
+```
 
+```bash
 # Terminal 2 - Run the frontend with hot reloading
 cd web-ui
-npm run dev
+bun run dev
 ```
+
+This setup allows the Next.js development server to handle frontend changes instantly, while the Rust backend runs independently. Note that in this mode, the backend won't serve the frontend files directly from its build path; you'll access the Next.js dev server (usually `http://localhost:3000`). The backend API will still be available (e.g., `http://localhost:8080/api/...`).
 
 ## Contributing
 

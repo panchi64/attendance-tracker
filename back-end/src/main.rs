@@ -8,6 +8,7 @@ use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
 use std::io::Result as IoResult;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -30,6 +31,7 @@ pub struct AppState {
     db_pool: SqlitePool,
     config: Config,
     ws_server: actix::Addr<AttendanceServer>,
+    active_host_course_id: Arc<Mutex<Option<Uuid>>>,
 }
 
 async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
@@ -40,11 +42,9 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
         .fetch_one(pool)
         .await?;
 
-    let mut default_id = Uuid::nil(); // Set a default value
-
     if course_count == 0 {
         log::info!("No courses found. Seeding default course...");
-        default_id = Uuid::new_v4();
+        let default_id = Uuid::new_v4();
         let default_name = "Default Course";
         let default_sections = vec!["000".to_string(), "001".to_string()];
         let sections_json = vec_string_to_json(&default_sections);
@@ -202,6 +202,13 @@ async fn main() -> IoResult<()> {
         .expect("Failed to run database migrations");
     log::info!("Database migrations completed.");
 
+    // Create necessary directories for uploads (This is now handled by the upload handler itself based on config.frontend_build_path)
+    // let uploads_dir = Path::new("../public/uploads/logos"); // Removed
+    // if !uploads_dir.exists() { // Removed
+    //     log::info!("Creating uploads directory: {}", uploads_dir.display()); // Removed
+    //     fs::create_dir_all(uploads_dir).expect("Failed to create uploads directory"); // Removed
+    // } // Removed
+
     // --- Seed Initial Data ---
     if let Err(e) = seed_initial_data(&pool).await {
         log::error!("Failed to seed initial data: {}", e);
@@ -248,9 +255,18 @@ async fn main() -> IoResult<()> {
     let server_addr = format!("{}:{}", config.server_host, config.server_port);
     log::info!("Starting server at http://{}", server_addr);
 
-    // Determine URL to open in browser
-    let open_url = utils::get_server_url(&config)
-        .unwrap_or_else(|| format!("http://localhost:{}", config.server_port));
+    let initial_active_course_id = db::preferences::get_current_course_id(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            log::warn!("Failed to get initial current_course_id for active_host_course_id: {}. Defaulting to None.", e);
+            None
+        });
+    log::info!(
+        "Initial active_host_course_id set to: {:?}",
+        initial_active_course_id
+    );
+
+    let open_url = format!("http://localhost:{}", config.server_port);
 
     // Spawn task to open browser
     tokio::spawn(async move {
@@ -269,6 +285,7 @@ async fn main() -> IoResult<()> {
         db_pool: pool.clone(),
         config: config.clone(),
         ws_server: ws_server.clone(),
+        active_host_course_id: Arc::new(Mutex::new(initial_active_course_id)),
     });
 
     HttpServer::new(move || {
@@ -307,6 +324,8 @@ async fn main() -> IoResult<()> {
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
                     .configure(api::confirmation_codes::config)
+                    // Add upload logo handler to public API scope
+                    .configure(api::upload::config)
                     // Courses endpoints grouped by resource
                     .service(
                         web::resource("/courses")
@@ -330,7 +349,7 @@ async fn main() -> IoResult<()> {
                     .route("/ws/{course_id}", web::get().to(api::ws::ws_index_public)),
             )
             // --- Static File Serving ---
-            .service(Files::new("/uploads", "../public/uploads").show_files_listing())
+            // .service(Files::new("/uploads", "../public/uploads").show_files_listing()) // Removed specific /uploads handler
             .service(
                 Files::new("/", &config.frontend_build_path)
                     .index_file("index.html")

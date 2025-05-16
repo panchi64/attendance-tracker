@@ -1,23 +1,52 @@
 use actix_multipart::Multipart;
-use actix_web::{HttpResponse, Responder, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
 use futures_util::TryStreamExt;
-use std::{fs, io::Write};
+use std::{fs, path::Path};
 use uuid::Uuid;
 
-use crate::{AppState, errors::AppError};
+use crate::{AppState, db::courses, errors::AppError};
 
-// Basic stub - Needs improvement (error handling, file naming, path validation)
 #[post("/upload-logo")]
 async fn upload_logo_handler(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
+    req: HttpRequest,
     mut payload: Multipart,
 ) -> Result<impl Responder, AppError> {
     log::info!("Receiving logo upload request");
 
-    let uploads_dir = "../public/uploads/logos";
-    fs::create_dir_all(uploads_dir)?; // Ensure the directory exists
+    // Extract course ID from header
+    let course_id_header = req
+        .headers()
+        .get("X-Course-ID")
+        .ok_or_else(|| AppError::BadClientData("Missing X-Course-ID header".to_string()))?;
 
-    let mut _file_path_on_server: Option<String> = None;
+    let course_id_str = course_id_header
+        .to_str()
+        .map_err(|_| AppError::BadClientData("Invalid course ID format in header".to_string()))?;
+
+    let course_id = Uuid::parse_str(course_id_str)
+        .map_err(|_| AppError::BadClientData("Invalid UUID format for course ID".to_string()))?;
+
+    // Verify course exists
+    let _ = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
+
+    // Construct the path using frontend_build_path from config
+    let base_uploads_dir = Path::new(&state.config.frontend_build_path) // Use config
+        .join("uploads")
+        .join("logos");
+
+    fs::create_dir_all(&base_uploads_dir).map_err(|io_error| {
+        log::error!(
+            "Failed to create directory {:?}: {}",
+            base_uploads_dir,
+            io_error
+        );
+        AppError::InternalError(anyhow::Error::new(io_error).context(format!(
+            "Failed to create upload directory: {:?}",
+            base_uploads_dir
+        )))
+    })?;
+
     let mut saved_filename: Option<String> = None;
 
     // Iterate over multipart fields
@@ -37,20 +66,47 @@ async fn upload_logo_handler(
                     .and_then(std::ffi::OsStr::to_str)
                     .unwrap_or("png"); // Default extension
                 let unique_filename = format!("{}.{}", Uuid::new_v4(), extension);
-                let server_path = format!("{}/{}", uploads_dir, unique_filename);
+                // Use the constructed base_uploads_dir
+                let server_path_buf = base_uploads_dir.join(&unique_filename);
+                let server_path = server_path_buf
+                    .to_str()
+                    .ok_or_else(|| {
+                        AppError::InternalError(anyhow::anyhow!(
+                            "Failed to construct server path for upload"
+                        ))
+                    })?
+                    .to_string();
 
-                _file_path_on_server = Some(server_path.clone());
-                saved_filename = Some(unique_filename); // Store just the filename for the URL path
+                // Clone server_path for the web::block *before* the inner loop consumes `field`
+                let server_path_for_block = server_path.clone();
 
-                // Create file and write stream data
-                let mut f = web::block(|| std::fs::File::create(server_path)).await??;
+                saved_filename = Some(unique_filename.clone());
+
+                let mut file_data = Vec::new();
+                // Inner loop consumes `field`
                 while let Some(chunk) = field.try_next().await? {
-                    f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
+                    file_data.extend_from_slice(&chunk);
                 }
-                log::info!(
-                    "Successfully saved uploaded file to: {}",
-                    _file_path_on_server.as_ref().unwrap()
-                );
+
+                // Write all data at once, using the early clone
+                let write_result_inner =
+                    web::block(move || std::fs::write(server_path_for_block, file_data))
+                        .await
+                        .map_err(|blocking_err| {
+                            log::error!("Blocking task for file write failed: {}", blocking_err);
+                            // This matches the From<BlockingError> for AppError behavior
+                            AppError::BlockingError(blocking_err.to_string())
+                        })?;
+
+                write_result_inner.map_err(|io_err| {
+                    log::error!("File write failed for path {}: {}", server_path, io_err);
+                    // Use the existing From<std::io::Error> for AppError conversion
+                    // This will create AppError::InternalError with context via anyhow
+                    AppError::from(io_err)
+                })?;
+
+                let path_for_logging = server_path.clone();
+                log::info!("Successfully saved uploaded file to: {}", path_for_logging);
                 break; // Assuming only one logo file
             }
         }
@@ -60,13 +116,33 @@ async fn upload_logo_handler(
         // Construct the URL path
         let url_path = format!("/uploads/logos/{}", name);
 
-        // TODO: Associate this url_path with the current course in the database
-        // Need the current course ID here! This might need adjustment.
-        // let current_course_id = pref_db::get_current_course_id(&state.db_pool).await?
-        //     .ok_or(AppError::BadClientData("No current course selected to associate logo with".to_string()))?;
-        // course_db::update_logo_path(&state.db_pool, current_course_id, &url_path).await?;
-        log::warn!(
-            "Logo upload successful, URL path is '{}'. DB update not yet implemented.",
+        // Create a minimal UpdateCoursePayload to update just the logo_path
+        let course = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
+        let payload = crate::models::course::UpdateCoursePayload {
+            name: course.name.clone(),
+            section_number: course.section_number.clone(),
+            sections: course
+                .sections
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            professor_name: course.professor_name.clone(),
+            office_hours: course.office_hours.clone(),
+            news: course.news.clone(),
+            total_students: course.total_students,
+            logo_path: url_path.clone(),
+        };
+
+        // Update the course with the new logo path
+        let _updated_course = courses::update_course(&state.db_pool, course_id, &payload).await?;
+
+        log::info!(
+            "Logo upload successful, updated course {} with logo path: {}",
+            course_id,
             url_path
         );
 
