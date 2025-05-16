@@ -6,7 +6,6 @@ use anyhow::Result as AnyhowResult;
 use dotenvy::dotenv;
 use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
-use std::fs;
 use std::io::Result as IoResult;
 use std::path::Path;
 use std::time::Duration;
@@ -254,9 +253,7 @@ async fn main() -> IoResult<()> {
     let server_addr = format!("{}:{}", config.server_host, config.server_port);
     log::info!("Starting server at http://{}", server_addr);
 
-    // Determine URL to open in browser
-    let open_url = utils::get_server_url(&config)
-        .unwrap_or_else(|| format!("http://localhost:{}", config.server_port));
+    let open_url = format!("http://localhost:{}", config.server_port);
 
     // Spawn task to open browser
     tokio::spawn(async move {
