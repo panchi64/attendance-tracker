@@ -106,7 +106,7 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
                         sqlx::query_scalar!("SELECT id FROM courses LIMIT 1")
                             .fetch_optional(pool)
                             .await?
-                            .and_then(|id_str| Uuid::parse_str(&id_str).ok());
+                            .and_then(|id_str: String| Uuid::parse_str(&id_str).ok());
 
                     if let Some(first_id) = first_course_id {
                         db::preferences::set_current_course_id(pool, first_id).await?;
@@ -130,7 +130,7 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
                     sqlx::query_scalar!("SELECT id FROM courses LIMIT 1")
                         .fetch_optional(pool)
                         .await?
-                        .and_then(|id_str| Uuid::parse_str(&id_str).ok());
+                        .and_then(|id_str: String| Uuid::parse_str(&id_str).ok());
 
                 if let Some(first_id) = first_course_id {
                     db::preferences::set_current_course_id(pool, first_id).await?;

@@ -22,6 +22,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
 import { useCourse } from '../../context/CourseContext';
+import { deleteCourse, loadCurrentCoursePreferences, getAvailableCourses } from '../../services/preferencesService';
 import { Check, Settings, Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import CourseCreationWizard from './CourseCreationWizard';
@@ -36,7 +37,7 @@ export default function CourseLibraryModal({
   open,
   onOpenChange,
 }: CourseLibraryModalProps) {
-  const { state, switchToAnotherCourse, deleteCurrentCourse } = useCourse();
+  const { state, switchToAnotherCourse, dispatch } = useCourse();
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -52,22 +53,21 @@ export default function CourseLibraryModal({
     }
   };
 
-  const handleEditCourse = (courseId: string) => {
-    // Only allow editing if it's the current course
-    if (courseId === state.courseId) {
-      setIsEditingCourse(true);
-    } else {
-      toast.info('Please switch to this course first to edit it');
+  const handleEditCourse = async (courseId: string) => {
+    // If it's not the current course, switch to it first
+    if (courseId !== state.courseId) {
+      try {
+        await switchToAnotherCourse(courseId);
+      } catch {
+        toast.error('Failed to switch to course for editing');
+        return;
+      }
     }
+    setIsEditingCourse(true);
   };
 
   const confirmDelete = (courseId: string, courseName: string) => {
-    // Only allow deleting if it's the current course
-    if (courseId === state.courseId) {
-      setCourseToDelete({ id: courseId, name: courseName });
-    } else {
-      toast.info('Please switch to this course first to delete it');
-    }
+    setCourseToDelete({ id: courseId, name: courseName });
   };
 
   const handleDeleteCourse = async () => {
@@ -75,11 +75,22 @@ export default function CourseLibraryModal({
 
     setIsDeleting(true);
     try {
-      await deleteCurrentCourse();
-      toast.success(`Course "${courseToDelete.name}" deleted successfully`);
-      setCourseToDelete(null);
-      // Close modal only after successful deletion
-      onOpenChange(false);
+      const success = await deleteCourse(courseToDelete.id);
+      if (success) {
+        toast.success(`Course "${courseToDelete.name}" deleted successfully`);
+
+        // Reload current course state and available courses
+        const currentPrefs = await loadCurrentCoursePreferences();
+        dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
+        const courses = await getAvailableCourses();
+        dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
+
+        setCourseToDelete(null);
+        // Close modal after successful deletion
+        onOpenChange(false);
+      } else {
+        throw new Error('Delete operation failed');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete course');
       setCourseToDelete(null);

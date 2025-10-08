@@ -84,6 +84,27 @@ else
 fi
 echo "Backend environment prepared."
 
+# Step 2.4: Create uploads directory structure
+echo "Step 2.4: Creating uploads directory structure..."
+mkdir -p back-end/uploads/logos
+echo "Uploads directory created."
+
+# Step 2.5: Ensure database exists and migrations are run
+echo "Step 2.5: Checking database setup..."
+cd back-end
+if ! command -v sqlx &> /dev/null; then
+    echo "Warning: sqlx-cli not found. Skipping database setup."
+    echo "The backend will attempt to run migrations on startup."
+else
+    echo "Creating database if it doesn't exist..."
+    sqlx database create 2>/dev/null || echo "Database already exists or error occurred (this is usually fine)."
+
+    echo "Running database migrations..."
+    sqlx migrate run
+fi
+cd ..
+echo "Database setup complete."
+
 
 # --- Phase 3: Launching the Backend ---
 echo ""

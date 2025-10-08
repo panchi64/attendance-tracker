@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -28,10 +28,10 @@ import {
 } from '../ui/form';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
-import { Button } from '../ui/button';
 import LogoUploader from '../ui/LogoUploader';
 import SectionManager from './SectionManager';
 import { useCourse } from '../../context/CourseContext';
+import { saveCoursePreferences } from '../../services/preferencesService';
 import { toast } from 'sonner';
 
 const courseFormSchema = z.object({
@@ -56,7 +56,7 @@ export default function CourseSettingsModal({
   open,
   onOpenChange,
 }: CourseSettingsModalProps) {
-  const { state, saveOrUpdateCourse, dispatch } = useCourse();
+  const { state, dispatch } = useCourse();
   const [activeTab, setActiveTab] = useState('basic');
   const [savingField, setSavingField] = useState<string | null>(null);
   const [lastSavedField, setLastSavedField] = useState<string | null>(null);
@@ -92,13 +92,26 @@ export default function CourseSettingsModal({
   }, [open, state, form]);
 
   // Helper function to immediately update context and persist
-  const updateContextAndSave = async (updates: Partial<CourseFormValues>, fieldName?: string) => {
+  const updateContextAndSave = useCallback(async (updates: Partial<CourseFormValues>, fieldName?: string) => {
     // Update form state
     Object.entries(updates).forEach(([key, value]) => {
       form.setValue(key as keyof CourseFormValues, value, { shouldDirty: true });
     });
 
-    // Update context state immediately
+    // Build the updated course preferences by merging current state with updates
+    const updatedCoursePrefs = {
+      id: state.courseId,
+      courseName: updates.courseName !== undefined ? updates.courseName : state.courseName,
+      sectionNumber: updates.sectionNumber !== undefined ? updates.sectionNumber : state.sectionNumber,
+      sections: updates.sections !== undefined ? updates.sections : state.sections,
+      professorName: updates.professorName !== undefined ? updates.professorName : state.professorName,
+      officeHours: updates.officeHours !== undefined ? updates.officeHours : state.officeHours,
+      news: updates.news !== undefined ? updates.news : state.news,
+      totalStudents: updates.totalStudents !== undefined ? updates.totalStudents : state.totalStudents,
+      logoPath: updates.logoPath !== undefined ? updates.logoPath : state.logoPath,
+    };
+
+    // Update context state immediately with the same values
     if (updates.courseName !== undefined) {
       dispatch({ type: 'SET_COURSE_NAME', payload: updates.courseName });
     }
@@ -129,9 +142,12 @@ export default function CourseSettingsModal({
       setSavingField(fieldName);
     }
 
-    // Persist to backend and localStorage
+    // Persist to backend and localStorage using the updated prefs we just calculated
     try {
-      await saveOrUpdateCourse();
+      const savedCourse = await saveCoursePreferences(updatedCoursePrefs);
+
+      // Update context with the saved course from backend
+      dispatch({ type: 'INITIALIZE_PREFERENCES', payload: savedCourse });
 
       // Show success briefly
       if (fieldName) {
@@ -146,19 +162,18 @@ export default function CourseSettingsModal({
         setSavingField(null);
       }
     }
-  };
+  }, [form, dispatch, state]);
 
-  const handleCancel = () => {
-    form.reset();
-    onOpenChange(false);
-  };
+  // Watch form values
+  const courseName = form.watch('courseName');
+  const professorName = form.watch('professorName');
+  const news = form.watch('news');
+  const officeHours = form.watch('officeHours');
+  const totalStudents = form.watch('totalStudents');
 
   // Debounced autosave for courseName
   useEffect(() => {
-    if (!open) return;
-
-    const courseName = form.watch('courseName');
-    if (!courseName || courseName === state.courseName) return;
+    if (!open || !courseName || courseName === state.courseName) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -169,14 +184,11 @@ export default function CourseSettingsModal({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [form.watch('courseName'), open]);
+  }, [courseName, open, state.courseName, updateContextAndSave]);
 
   // Debounced autosave for professorName
   useEffect(() => {
-    if (!open) return;
-
-    const professorName = form.watch('professorName');
-    if (!professorName || professorName === state.professorName) return;
+    if (!open || !professorName || professorName === state.professorName) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -187,14 +199,11 @@ export default function CourseSettingsModal({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [form.watch('professorName'), open]);
+  }, [professorName, open, state.professorName, updateContextAndSave]);
 
   // Debounced autosave for news
   useEffect(() => {
-    if (!open) return;
-
-    const news = form.watch('news');
-    if (news === state.news) return;
+    if (!open || news === state.news) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -205,14 +214,11 @@ export default function CourseSettingsModal({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [form.watch('news'), open]);
+  }, [news, open, state.news, updateContextAndSave]);
 
   // Debounced autosave for officeHours
   useEffect(() => {
-    if (!open) return;
-
-    const officeHours = form.watch('officeHours');
-    if (officeHours === state.officeHours) return;
+    if (!open || officeHours === state.officeHours) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -223,14 +229,11 @@ export default function CourseSettingsModal({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [form.watch('officeHours'), open]);
+  }, [officeHours, open, state.officeHours, updateContextAndSave]);
 
   // Debounced autosave for totalStudents
   useEffect(() => {
-    if (!open) return;
-
-    const totalStudents = form.watch('totalStudents');
-    if (totalStudents === state.totalStudents) return;
+    if (!open || totalStudents === state.totalStudents) return;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -241,11 +244,11 @@ export default function CourseSettingsModal({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [form.watch('totalStudents'), open]);
+  }, [totalStudents, open, state.totalStudents, updateContextAndSave]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl h-[600px] flex flex-col">
         <DialogHeader>
           <DialogTitle>Course Settings</DialogTitle>
           <DialogDescription className="flex items-center justify-between">
@@ -260,8 +263,8 @@ export default function CourseSettingsModal({
         </DialogHeader>
 
         <Form {...form}>
-          <div className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="flex-1 overflow-y-auto space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="sections">Sections</TabsTrigger>
@@ -270,7 +273,7 @@ export default function CourseSettingsModal({
               </TabsList>
 
               {/* Basic Info Tab */}
-              <TabsContent value="basic" className="space-y-4 mt-4">
+              <TabsContent value="basic" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                 <FormField
                   control={form.control}
                   name="courseName"
@@ -328,7 +331,7 @@ export default function CourseSettingsModal({
               </TabsContent>
 
               {/* Sections Tab */}
-              <TabsContent value="sections" className="space-y-4 mt-4">
+              <TabsContent value="sections" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                 <SectionManager
                   sections={form.watch('sections')}
                   currentSection={form.watch('sectionNumber')}
@@ -352,7 +355,7 @@ export default function CourseSettingsModal({
               </TabsContent>
 
               {/* Schedule Tab */}
-              <TabsContent value="schedule" className="space-y-4 mt-4">
+              <TabsContent value="schedule" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                 <FormField
                   control={form.control}
                   name="officeHours"
@@ -395,7 +398,7 @@ export default function CourseSettingsModal({
               </TabsContent>
 
               {/* Branding Tab */}
-              <TabsContent value="branding" className="space-y-4 mt-4">
+              <TabsContent value="branding" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                 <FormField
                   control={form.control}
                   name="logoPath"
@@ -428,17 +431,6 @@ export default function CourseSettingsModal({
                 />
               </TabsContent>
             </Tabs>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCancel}
-              >
-                Close
-              </Button>
-            </div>
           </div>
         </Form>
       </DialogContent>

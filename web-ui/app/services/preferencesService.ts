@@ -40,7 +40,7 @@ interface BackendCurrentPreference {
     current_course_id: string | null; // Expect UUID string or null
 }
 
-const STORAGE_KEY = 'attendance_tracker_preferences_v2'; // Use new key for updated structure
+const STORAGE_KEY = 'attendance_tracker_preferences_v3'; // Use new key for updated structure with cache validation
 
 // Default preferences
 const defaultPreferences: PreferencesStore = {

@@ -93,7 +93,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-6xl overflow-hidden relative">
+      <Card className="w-full max-w-6xl overflow-hidden relative border-0 shadow-lg">
         {/* Error Display */}
         {state.error && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
