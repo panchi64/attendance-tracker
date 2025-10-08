@@ -50,7 +50,7 @@ Attendance Tracker creates a locally accessible web server that students can con
 
 ---
 
-![Attendance Page](./readme-assets/image-1.png)
+![Attendance Page](./readme-assets/image-1.jpeg)
 
 - Student attendance submission form
 

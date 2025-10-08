@@ -262,7 +262,7 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
             // Also update backend preference to match
             if (firstCourse.id) {
                 try {
-                    await fetch('/api/preferences', {
+                    await fetch('/api/admin/preferences', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ current_course_id: firstCourse.id }),
@@ -316,7 +316,7 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
 export const saveCoursePreferences = async (coursePreferences: CoursePreferences): Promise<CoursePreferences> => {
     const courseId = coursePreferences.id;
     const method = courseId ? 'PUT' : 'POST';
-    const url = courseId ? `/api/courses/${courseId}` : '/api/courses';
+    const url = courseId ? `/api/admin/courses/${courseId}` : '/api/admin/courses';
     const body = transformFrontendCourse(coursePreferences);
 
     console.log(`Saving course via ${method} to ${url}`, body);
@@ -445,7 +445,7 @@ export const createNewCourse = async (courseName: string, initialPreferences?: P
         // Update the backend preference to make this the current course
         if (savedCourse.id) {
             try {
-                await fetch('/api/preferences', {
+                await fetch('/api/admin/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ current_course_id: savedCourse.id }),
@@ -479,7 +479,7 @@ export const switchCourse = async (courseId: string): Promise<CoursePreferences 
     console.log(`Attempting to switch current course to ID: ${courseId}`);
     // 1. Update current course ID preference on the backend
     try {
-        const prefResponse = await fetch('/api/preferences', {
+        const prefResponse = await fetch('/api/admin/preferences', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ current_course_id: courseId }),
@@ -538,7 +538,7 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
 
     try {
         // Delete from backend
-        const response = await fetch(`/api/courses/${courseId}`, { method: 'DELETE' });
+        const response = await fetch(`/api/admin/courses/${courseId}`, { method: 'DELETE' });
 
         if (!response.ok && response.status !== 404) { // Allow 404 (already deleted is ok)
             const errorData = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
@@ -574,7 +574,7 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
             if (updatedCurrentId) {
                 console.log(`Updating backend current course preference to: ${updatedCurrentId}`);
                 try {
-                    await fetch('/api/preferences', {
+                    await fetch('/api/admin/preferences', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ current_course_id: updatedCurrentId }),

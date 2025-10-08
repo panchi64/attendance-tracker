@@ -67,7 +67,7 @@ const LogoUploader = ({
                 formData.append('logo', file);
                 formData.append('courseId', courseId);
 
-                const response = await fetch('/api/upload-logo', {
+                const response = await fetch('/api/admin/upload-logo', {
                     method: 'POST',
                     body: formData,
                     headers: { 'X-Course-ID': courseId }
