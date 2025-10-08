@@ -29,7 +29,7 @@ Attendance Tracker creates a locally accessible web server that students can con
 ### Frontend
 
 - **Next.js 15**: React-based framework for the user interface
-- **TailwindCSS**: Utility-first CSS framework for styling
+- **TailwindCSS 4**: Utility-first CSS framework for styling
 - **React 19**: UI component library
 - **Bun**: Fast JavaScript all-in-one toolkit (runtime, bundler, package manager)
 
@@ -112,7 +112,7 @@ This script will:
 4. Launch the backend server, which will serve the frontend.
 5. Automatically attempt to open a browser to the application.
 
-Make sure you have an `.env` file configured at the root (you can copy `.env.example`).
+Make sure you have an `.env` file configured in the `back-end/` directory (you can copy `back-end/.env.example`).
 
 ## Project Structure
 
