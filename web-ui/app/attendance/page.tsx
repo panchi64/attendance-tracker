@@ -130,7 +130,7 @@ export default function AttendanceForm() {
     if (submitted) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full text-center">
+                <Card className="max-w-md w-full text-center border-0">
                     <CardContent className="pt-8">
                         <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
                         <CardTitle className="text-3xl font-bold mb-2">Attendance Recorded!</CardTitle>
@@ -148,7 +148,7 @@ export default function AttendanceForm() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-            <Card className="max-w-md w-full mb-4">
+            <Card className="max-w-md w-full mb-4 border-0">
                 <CardContent className="pt-8">
                 <div className="flex items-center justify-center mb-6">
                     <div className="w-16 h-16 relative mr-4">

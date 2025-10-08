@@ -12,7 +12,7 @@ export default function ConfirmationCode() {
   return (
     <div className="w-full text-center">
       <div className="text-lg sm:text-xl text-gray-700 font-medium">Confirmation Code</div>
-      <div className={`text-6xl sm:text-7xl font-bold text-gray-900 mt-2 ${code === '...' ? 'animate-pulse text-gray-300' : ''}`}>
+      <div className={`text-5xl sm:text-6xl font-bold text-gray-900 mt-2 font-mono tracking-wider ${code === '...' ? 'animate-pulse text-gray-300' : ''}`}>
         {code}
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4 overflow-hidden">

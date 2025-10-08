@@ -61,11 +61,13 @@ export function useAttendanceWebSocket(courseId: string | null, onMessage: (coun
       wsRef.current?.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
 
-      // Determine WebSocket URL - try the non-host version first
+      // Determine WebSocket URL - use /api/host/ws for host-only access
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      // Use the host address directly from the window.location to avoid any potential URL formation issues
-      const baseUrl = `${window.location.hostname}:${window.location.port}`;
-      const wsUrl = `${wsProtocol}//${baseUrl}/api/ws/${courseId}`;
+      // In development (port 3000), connect to backend on 8080
+      // In production, the static export is served by the backend on the same port
+      const port = window.location.port === '3000' ? '8080' : window.location.port;
+      const baseUrl = `${window.location.hostname}:${port}`;
+      const wsUrl = `${wsProtocol}//${baseUrl}/api/host/ws/${courseId}`;
       console.log("WS: Connecting to:", wsUrl);
 
       try {
