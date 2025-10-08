@@ -9,7 +9,7 @@ export interface CoursePreferences {
     officeHours: string;
     news: string;
     totalStudents: number;
-    logoPath: string;
+    logoPath: string; // Path to university logo (shared across all courses)
 }
 
 export interface PreferencesStore {
@@ -30,7 +30,7 @@ interface BackendCourse {
     office_hours: string;
     news: string;
     total_students: number;
-    logo_path: string;
+    logo_path: string; // Path to university logo (shared across all courses)
     created_at: string; // Or DateTime object if parsed
     updated_at: string; // Or DateTime object if parsed
 }
@@ -95,7 +95,7 @@ const transformBackendCourse = (backendCourse: BackendCourse): CoursePreferences
  * Transform frontend course format to backend format for API requests (Create/Update)
  */
 const transformFrontendCourse = (frontendCourse: CoursePreferences): Omit<BackendCourse, 'id' | 'created_at' | 'updated_at' | 'confirmation_code' | 'confirmation_code_expires_at'> => {
-    // Strip cache-busting query parameters from logoPath before sending to backend
+    // Strip cache-busting query parameters from university logoPath before sending to backend
     const cleanLogoPath = frontendCourse.logoPath.split('?')[0];
 
     // Returns the data structure expected by POST /api/courses or PUT /api/courses/{id}

@@ -28,8 +28,7 @@ const LogoUploader = ({
         if (defaultLogoPath && defaultLogoPath !== logoPath) {
             setLogoPath(defaultLogoPath);
         } else if (!defaultLogoPath && logoPath !== "/university-logo.png") {
-            // If defaultLogoPath becomes empty/null (e.g. no course selected or course has no logo),
-            // revert to a known default, but only if not already there.
+            // If defaultLogoPath becomes empty/null, revert to the default university logo
             setLogoPath("/university-logo.png");
         }
     }, [defaultLogoPath, logoPath]); // Re-run if defaultLogoPath or internal logoPath changes
@@ -38,8 +37,8 @@ const LogoUploader = ({
     const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
 
-        if (!courseId) { // <--- Check if courseId is available
-            alert('Cannot upload logo: No course selected.');
+        if (!courseId) { // Check if courseId is available for permission verification
+            alert('Cannot upload university logo: No course selected.');
             return;
         }
 
@@ -63,7 +62,7 @@ const LogoUploader = ({
                 const previewUrl = URL.createObjectURL(file);
                 setLogoPath(previewUrl);
 
-                // Upload the file to the server
+                // Upload the file to the server (replaces previous university logo)
                 const formData = new FormData();
                 formData.append('logo', file);
                 formData.append('courseId', courseId);
@@ -86,13 +85,13 @@ const LogoUploader = ({
                         onLogoChange(data.logoPath);
                     }
                 } else {
-                    // If upload failed, revert to default logo
+                    // If upload failed, revert to default university logo
                     setLogoPath(defaultLogoPath);
                     alert(`Upload failed: ${data.message}`);
                 }
             } catch (error) {
-                console.error('Error uploading logo:', error);
-                alert('Failed to upload logo. Please try again.');
+                console.error('Error uploading university logo:', error);
+                alert('Failed to upload university logo. Please try again.');
                 setLogoPath(defaultLogoPath);
             } finally {
                 setIsUploading(false);
@@ -102,8 +101,8 @@ const LogoUploader = ({
 
     // Trigger file input when edit button/overlay is clicked
     const handleLogoClick = () => {
-        if (!courseId && isCustomizing) { // <--- Prevent upload if no course ID
-            alert("Please select or save the course before changing the logo.");
+        if (!courseId && isCustomizing) { // Prevent upload if no course ID for permission verification
+            alert("Please select or save the course before changing the university logo.");
             return;
         }
         if (isCustomizing && fileInputRef.current && !isUploading) {
@@ -126,7 +125,7 @@ const LogoUploader = ({
                 className="hidden"
             />
 
-            {/* Logo image */}
+            {/* University Logo image */}
             <div className="w-32 h-32 relative">
                 <Image
                     src={logoPath}
@@ -156,7 +155,7 @@ const LogoUploader = ({
                 >
                     <div className="flex flex-col items-center">
                         <Pencil className="text-white w-6 h-6" />
-                        <span className="text-white text-xs mt-1">Change Logo</span>
+                        <span className="text-white text-xs mt-1">Change University Logo</span>
                     </div>
                 </div>
             )}

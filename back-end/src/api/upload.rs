@@ -12,9 +12,9 @@ async fn upload_logo_handler(
     req: HttpRequest,
     mut payload: Multipart,
 ) -> Result<impl Responder, AppError> {
-    log::info!("Receiving logo upload request");
+    log::info!("Receiving university logo upload request");
 
-    // Extract course ID from header
+    // Extract course ID from header (used only for permission verification)
     let course_id_header = req
         .headers()
         .get("X-Course-ID")
@@ -27,7 +27,7 @@ async fn upload_logo_handler(
     let course_id = Uuid::parse_str(course_id_str)
         .map_err(|_| AppError::BadClientData("Invalid UUID format for course ID".to_string()))?;
 
-    // Verify course exists
+    // Verify course exists (permission check)
     let _ = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
 
     // Construct the path using uploads_path from config
@@ -46,6 +46,30 @@ async fn upload_logo_handler(
         )))
     })?;
 
+    // Clean up old university logo files before saving new one
+    log::info!("Cleaning up old university logo files");
+    if let Ok(entries) = fs::read_dir(&base_uploads_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    if let Ok(filename) = entry.file_name().into_string() {
+                        // Delete any file that looks like a logo (png, jpg, jpeg, etc.)
+                        // Keep the default university-logo.png if it's the fallback
+                        if filename != "university-logo.png" &&
+                           (filename.ends_with(".png") || filename.ends_with(".jpg") ||
+                            filename.ends_with(".jpeg") || filename.ends_with(".gif")) {
+                            if let Err(e) = fs::remove_file(entry.path()) {
+                                log::warn!("Failed to delete old logo file {}: {}", filename, e);
+                            } else {
+                                log::info!("Deleted old logo file: {}", filename);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut saved_filename: Option<String> = None;
 
     // Iterate over multipart fields
@@ -57,16 +81,19 @@ async fn upload_logo_handler(
             let filename = cd.get_filename();
             if field_name == Some("logo") && filename.is_some() {
                 let original_filename = filename.unwrap().to_string();
-                log::info!("Processing uploaded file: {}", original_filename);
+                log::info!("Processing uploaded university logo file: {}", original_filename);
 
-                // Sanitize filename and create unique name
+                // Extract extension from original filename
                 let extension = std::path::Path::new(&original_filename)
                     .extension()
                     .and_then(std::ffi::OsStr::to_str)
                     .unwrap_or("png"); // Default extension
-                let unique_filename = format!("{}.{}", Uuid::new_v4(), extension);
+
+                // Use a fixed filename for university logo with the original extension
+                let university_logo_filename = format!("university-logo.{}", extension);
+
                 // Use the constructed base_uploads_dir
-                let server_path_buf = base_uploads_dir.join(&unique_filename);
+                let server_path_buf = base_uploads_dir.join(&university_logo_filename);
                 let server_path = server_path_buf
                     .to_str()
                     .ok_or_else(|| {
@@ -79,7 +106,7 @@ async fn upload_logo_handler(
                 // Clone server_path for the web::block *before* the inner loop consumes `field`
                 let server_path_for_block = server_path.clone();
 
-                saved_filename = Some(unique_filename.clone());
+                saved_filename = Some(university_logo_filename.clone());
 
                 let mut file_data = Vec::new();
                 // Inner loop consumes `field`
@@ -105,17 +132,17 @@ async fn upload_logo_handler(
                 })?;
 
                 let path_for_logging = server_path.clone();
-                log::info!("Successfully saved uploaded file to: {}", path_for_logging);
-                break; // Assuming only one logo file
+                log::info!("Successfully saved university logo to: {}", path_for_logging);
+                break; // Only process one logo file
             }
         }
     }
 
     if let Some(name) = saved_filename {
-        // Construct the URL path
+        // Construct the URL path for the university logo
         let url_path = format!("/uploads/logos/{}", name);
 
-        // Create a minimal UpdateCoursePayload to update just the logo_path
+        // Update the course with the new university logo path
         let course = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
         let payload = crate::models::course::UpdateCoursePayload {
             name: course.name.clone(),
@@ -136,24 +163,24 @@ async fn upload_logo_handler(
             logo_path: url_path.clone(),
         };
 
-        // Update the course with the new logo path
+        // Update the course with the new university logo path
         let _updated_course = courses::update_course(&state.db_pool, course_id, &payload).await?;
 
         log::info!(
-            "Logo upload successful, updated course {} with logo path: {}",
+            "University logo upload successful, updated course {} with logo path: {}",
             course_id,
             url_path
         );
 
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
-            "message": "Logo uploaded successfully",
+            "message": "University logo uploaded successfully",
             "logoPath": url_path // Return the relative URL path
         })))
     } else {
-        log::error!("Logo upload failed: 'logo' field not found in multipart data.");
+        log::error!("University logo upload failed: 'logo' field not found in multipart data.");
         Err(AppError::BadClientData(
-            "No logo file found in upload".to_string(),
+            "No university logo file found in upload".to_string(),
         ))
     }
 }

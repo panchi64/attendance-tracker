@@ -30,7 +30,7 @@ export type CourseAction =
   | { type: 'SET_OFFICE_HOURS'; payload: string; }
   | { type: 'SET_NEWS'; payload: string; }
   | { type: 'SET_TOTAL_STUDENTS'; payload: number; }
-  | { type: 'SET_LOGO_PATH'; payload: string; }
+  | { type: 'SET_LOGO_PATH'; payload: string; } // Path to university logo (shared across all courses)
   | { type: 'SET_CONFIRMATION_CODE'; payload: string; }
   | { type: 'SET_CODE_PROGRESS'; payload: number; }
   | { type: 'SET_PRESENT_COUNT'; payload: number; }

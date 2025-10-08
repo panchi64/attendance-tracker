@@ -284,7 +284,7 @@ export default function CourseCreationWizard({
                   name="logoPath"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Course Logo</FormLabel>
+                      <FormLabel>University Logo</FormLabel>
                       <FormControl>
                         <LogoUploader
                           isCustomizing={true}
@@ -294,7 +294,7 @@ export default function CourseCreationWizard({
                         />
                       </FormControl>
                       <FormDescription>
-                        Upload a logo that represents your course or institution
+                        Upload your university or institution logo (will be used across all courses)
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

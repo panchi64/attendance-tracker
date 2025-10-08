@@ -17,11 +17,11 @@ export default function CourseHeader() {
       <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
         {/* Left Side: Logo & Office Hours */}
         <div className="flex items-center gap-6 w-full sm:w-auto">
-          {/* Logo Display */}
+          {/* University Logo Display */}
           <div className="w-20 h-20 sm:w-24 sm:h-24 relative flex-shrink-0">
             <Image
               src={state.logoPath || '/university-logo.png'}
-              alt="Course Logo"
+              alt="University Logo"
               fill
               sizes="(max-width: 640px) 80px, 96px"
               className="object-contain"

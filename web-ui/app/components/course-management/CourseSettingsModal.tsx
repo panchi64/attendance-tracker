@@ -58,7 +58,8 @@ export default function CourseSettingsModal({
 }: CourseSettingsModalProps) {
   const { state, saveOrUpdateCourse, dispatch } = useCourse();
   const [activeTab, setActiveTab] = useState('basic');
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingField, setSavingField] = useState<string | null>(null);
+  const [lastSavedField, setLastSavedField] = useState<string | null>(null);
 
   const form = useForm<CourseFormValues>({
     resolver: zodResolver(courseFormSchema),
@@ -91,7 +92,7 @@ export default function CourseSettingsModal({
   }, [open, state, form]);
 
   // Helper function to immediately update context and persist
-  const updateContextAndSave = async (updates: Partial<CourseFormValues>) => {
+  const updateContextAndSave = async (updates: Partial<CourseFormValues>, fieldName?: string) => {
     // Update form state
     Object.entries(updates).forEach(([key, value]) => {
       form.setValue(key as keyof CourseFormValues, value, { shouldDirty: true });
@@ -123,64 +124,143 @@ export default function CourseSettingsModal({
       dispatch({ type: 'SET_SECTION_NUMBER', payload: updates.sectionNumber });
     }
 
+    // Set saving state
+    if (fieldName) {
+      setSavingField(fieldName);
+    }
+
     // Persist to backend and localStorage
     try {
       await saveOrUpdateCourse();
+
+      // Show success briefly
+      if (fieldName) {
+        setLastSavedField(fieldName);
+        setTimeout(() => setLastSavedField(null), 2000);
+      }
     } catch (error) {
       console.error('Failed to save changes:', error);
       throw error;
-    }
-  };
-
-  const onSubmit = async (data: CourseFormValues) => {
-    setIsSaving(true);
-
-    try {
-      // Update context state with form data
-      dispatch({ type: 'SET_COURSE_NAME', payload: data.courseName });
-      dispatch({ type: 'SET_PROFESSOR_NAME', payload: data.professorName });
-      dispatch({ type: 'SET_OFFICE_HOURS', payload: data.officeHours || '' });
-      dispatch({ type: 'SET_NEWS', payload: data.news || '' });
-      dispatch({ type: 'SET_TOTAL_STUDENTS', payload: data.totalStudents || 0 });
-      dispatch({ type: 'SET_LOGO_PATH', payload: data.logoPath || '/university-logo.png' });
-      dispatch({ type: 'SET_SECTIONS', payload: data.sections });
-      dispatch({ type: 'SET_SECTION_NUMBER', payload: data.sectionNumber });
-
-      // Save to backend
-      await saveOrUpdateCourse();
-
-      toast.success(`Course "${data.courseName}" saved successfully`);
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save course');
     } finally {
-      setIsSaving(false);
+      if (fieldName) {
+        setSavingField(null);
+      }
     }
   };
 
   const handleCancel = () => {
-    if (form.formState.isDirty) {
-      if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
-        form.reset();
-        onOpenChange(false);
-      }
-    } else {
-      onOpenChange(false);
-    }
+    form.reset();
+    onOpenChange(false);
   };
+
+  // Debounced autosave for courseName
+  useEffect(() => {
+    if (!open) return;
+
+    const courseName = form.watch('courseName');
+    if (!courseName || courseName === state.courseName) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updateContextAndSave({ courseName }, 'courseName');
+      } catch {
+        toast.error('Failed to save course name');
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('courseName'), open]);
+
+  // Debounced autosave for professorName
+  useEffect(() => {
+    if (!open) return;
+
+    const professorName = form.watch('professorName');
+    if (!professorName || professorName === state.professorName) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updateContextAndSave({ professorName }, 'professorName');
+      } catch {
+        toast.error('Failed to save professor name');
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('professorName'), open]);
+
+  // Debounced autosave for news
+  useEffect(() => {
+    if (!open) return;
+
+    const news = form.watch('news');
+    if (news === state.news) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updateContextAndSave({ news }, 'news');
+      } catch {
+        toast.error('Failed to save news');
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('news'), open]);
+
+  // Debounced autosave for officeHours
+  useEffect(() => {
+    if (!open) return;
+
+    const officeHours = form.watch('officeHours');
+    if (officeHours === state.officeHours) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updateContextAndSave({ officeHours }, 'officeHours');
+      } catch {
+        toast.error('Failed to save office hours');
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('officeHours'), open]);
+
+  // Debounced autosave for totalStudents
+  useEffect(() => {
+    if (!open) return;
+
+    const totalStudents = form.watch('totalStudents');
+    if (totalStudents === state.totalStudents) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updateContextAndSave({ totalStudents }, 'totalStudents');
+      } catch {
+        toast.error('Failed to save total students');
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('totalStudents'), open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Course Settings</DialogTitle>
-          <DialogDescription>
-            Manage your course information, sections, schedule, and branding.
+          <DialogDescription className="flex items-center justify-between">
+            <span>Manage your course information, sections, schedule, and branding.</span>
+            {savingField && (
+              <span className="text-xs text-muted-foreground ml-2">Saving...</span>
+            )}
+            {!savingField && lastSavedField && (
+              <span className="text-xs text-green-600 ml-2">Saved ✓</span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
@@ -321,7 +401,7 @@ export default function CourseSettingsModal({
                   name="logoPath"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Course Logo</FormLabel>
+                      <FormLabel>University Logo</FormLabel>
                       <FormControl>
                         <LogoUploader
                           isCustomizing={true}
@@ -331,16 +411,16 @@ export default function CourseSettingsModal({
                               // Add cache buster to force browser to reload the image
                               const cacheBustedPath = `${path}?v=${Date.now()}`;
                               await updateContextAndSave({ logoPath: cacheBustedPath });
-                              toast.success('Logo updated successfully');
+                              toast.success('University logo updated successfully');
                             } catch {
-                              toast.error('Failed to save logo change');
+                              toast.error('Failed to save university logo change');
                             }
                           }}
                           courseId={state.courseId}
                         />
                       </FormControl>
                       <FormDescription>
-                        Upload a logo that represents your course or institution
+                        Upload your university or institution logo (replaces the previous logo)
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -355,18 +435,11 @@ export default function CourseSettingsModal({
                 type="button"
                 variant="outline"
                 onClick={handleCancel}
-                disabled={isSaving}
               >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSaving}
-              >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                Close
               </Button>
             </div>
-          </form>
+          </div>
         </Form>
       </DialogContent>
     </Dialog>
