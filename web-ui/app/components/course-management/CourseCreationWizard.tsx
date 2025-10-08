@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog';
+} from "../ui/dialog";
 import {
   Form,
   FormControl,
@@ -19,26 +19,26 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '../ui/form';
-import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import LogoUploader from '../ui/LogoUploader';
-import SectionManager from './SectionManager';
-import { useCourse } from '../../context/CourseContext';
-import { toast } from 'sonner';
-import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
+} from "../ui/form";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import LogoUploader from "../ui/LogoUploader";
+import SectionManager from "./SectionManager";
+import { useCourse } from "../../context/CourseContext";
+import { toast } from "sonner";
+import { ChevronRight, ChevronLeft, Check } from "lucide-react";
 
 const courseCreationSchema = z.object({
-  courseName: z.string().min(1, 'Course name is required'),
-  professorName: z.string().min(1, 'Professor name is required'),
+  courseName: z.string().min(1, "Course name is required"),
+  professorName: z.string().min(1, "Professor name is required"),
   officeHours: z.string().optional(),
   news: z.string().optional(),
-  totalStudents: z.number().int().min(0, 'Must be 0 or greater').optional(),
+  totalStudents: z.number().int().min(0, "Must be 0 or greater").optional(),
   logoPath: z.string().optional(),
-  sections: z.array(z.string()).min(1, 'At least one section is required'),
-  sectionNumber: z.string().min(1, 'Active section is required'),
+  sections: z.array(z.string()).min(1, "At least one section is required"),
+  sectionNumber: z.string().min(1, "Active section is required"),
 });
 
 type CourseCreationValues = z.infer<typeof courseCreationSchema>;
@@ -49,11 +49,11 @@ interface CourseCreationWizardProps {
 }
 
 const STEPS = [
-  { id: 1, name: 'Basic Info', description: 'Course name and professor' },
-  { id: 2, name: 'Sections', description: 'Manage course sections' },
-  { id: 3, name: 'Schedule', description: 'Office hours and capacity' },
-  { id: 4, name: 'Branding', description: 'Logo and announcements' },
-  { id: 5, name: 'Review', description: 'Review and create' },
+  { id: 1, name: "Basic Info", description: "Course name and professor" },
+  { id: 2, name: "Sections", description: "Manage course sections" },
+  { id: 3, name: "Schedule", description: "Office hours and capacity" },
+  { id: 4, name: "Branding", description: "Logo and announcements" },
+  { id: 5, name: "Review", description: "Review and create" },
 ];
 
 export default function CourseCreationWizard({
@@ -67,14 +67,14 @@ export default function CourseCreationWizard({
   const form = useForm<CourseCreationValues>({
     resolver: zodResolver(courseCreationSchema),
     defaultValues: {
-      courseName: '',
-      professorName: '',
-      officeHours: '',
-      news: '',
+      courseName: "",
+      professorName: "",
+      officeHours: "",
+      news: "",
       totalStudents: 0,
-      logoPath: '/university-logo.png',
-      sections: ['000'],
-      sectionNumber: '000',
+      logoPath: "/university-logo.png",
+      sections: ["000"],
+      sectionNumber: "000",
     },
   });
 
@@ -85,10 +85,10 @@ export default function CourseCreationWizard({
       // Create the course via context with all form data
       await createNewCourseAndSwitch(data.courseName, {
         professorName: data.professorName,
-        officeHours: data.officeHours || '',
-        news: data.news || '',
+        officeHours: data.officeHours || "",
+        news: data.news || "",
         totalStudents: data.totalStudents || 0,
-        logoPath: data.logoPath || '/university-logo.png',
+        logoPath: data.logoPath || "/university-logo.png",
         sections: data.sections,
         sectionNumber: data.sectionNumber,
       });
@@ -98,7 +98,9 @@ export default function CourseCreationWizard({
       setCurrentStep(1);
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create course');
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create course",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -107,13 +109,13 @@ export default function CourseCreationWizard({
   const validateStep = async (step: number): Promise<boolean> => {
     switch (step) {
       case 1:
-        return await form.trigger(['courseName', 'professorName']);
+        return await form.trigger(["courseName", "professorName"]);
       case 2:
-        return await form.trigger(['sections', 'sectionNumber']);
+        return await form.trigger(["sections", "sectionNumber"]);
       case 3:
-        return await form.trigger(['officeHours', 'totalStudents']);
+        return await form.trigger(["officeHours", "totalStudents"]);
       case 4:
-        return await form.trigger(['logoPath', 'news']);
+        return await form.trigger(["logoPath", "news"]);
       default:
         return true;
     }
@@ -132,7 +134,11 @@ export default function CourseCreationWizard({
 
   const handleClose = () => {
     if (form.formState.isDirty) {
-      if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+      if (
+        window.confirm(
+          "You have unsaved changes. Are you sure you want to close?",
+        )
+      ) {
         form.reset();
         setCurrentStep(1);
         onOpenChange(false);
@@ -162,24 +168,33 @@ export default function CourseCreationWizard({
                 <div
                   className={`
                     w-10 h-10 rounded-full flex items-center justify-center font-semibold mb-1 transition-colors
-                    ${currentStep >= step.id ? 'bg-primary text-primary-foreground' : 'bg-gray-200 text-gray-500'}
+                    ${currentStep >= step.id ? "bg-primary text-primary-foreground" : "bg-gray-200 text-gray-500"}
                   `}
                 >
-                  {currentStep > step.id ? <Check className="h-5 w-5" /> : step.id}
+                  {currentStep > step.id ? (
+                    <Check className="h-5 w-5" />
+                  ) : (
+                    step.id
+                  )}
                 </div>
                 <div className="text-xs text-center">
                   <div className="font-medium">{step.name}</div>
                 </div>
               </div>
               {index < STEPS.length - 1 && (
-                <div className={`h-0.5 flex-1 ${currentStep > step.id ? 'bg-primary' : 'bg-gray-200'}`} />
+                <div
+                  className={`h-0.5 flex-1 ${currentStep > step.id ? "bg-primary" : "bg-gray-200"}`}
+                />
               )}
             </div>
           ))}
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex-1 overflow-y-auto px-1"
+          >
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
               <div className="space-y-4">
@@ -190,7 +205,10 @@ export default function CourseCreationWizard({
                     <FormItem>
                       <FormLabel>Course Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Introduction to Computer Science" {...field} />
+                        <Input
+                          placeholder="e.g., Introduction to Computer Science"
+                          {...field}
+                        />
                       </FormControl>
                       <FormDescription>
                         The full name of the course
@@ -210,7 +228,8 @@ export default function CourseCreationWizard({
                         <Input placeholder="e.g., Dr. Jane Smith" {...field} />
                       </FormControl>
                       <FormDescription>
-                        Instructor&apos;s name as it should appear on the dashboard
+                        Instructor&apos;s name as it should appear on the
+                        dashboard
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -223,10 +242,20 @@ export default function CourseCreationWizard({
             {currentStep === 2 && (
               <div className="space-y-4">
                 <SectionManager
-                  sections={form.watch('sections')}
-                  currentSection={form.watch('sectionNumber')}
-                  onSectionsChange={(sections) => form.setValue('sections', sections, { shouldDirty: true, shouldValidate: true })}
-                  onCurrentSectionChange={(section) => form.setValue('sectionNumber', section, { shouldDirty: true, shouldValidate: true })}
+                  sections={form.watch("sections")}
+                  currentSection={form.watch("sectionNumber")}
+                  onSectionsChange={(sections) =>
+                    form.setValue("sections", sections, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  onCurrentSectionChange={(section) =>
+                    form.setValue("sectionNumber", section, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
                 />
               </div>
             )}
@@ -241,7 +270,10 @@ export default function CourseCreationWizard({
                     <FormItem>
                       <FormLabel>Office Hours</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., MWF 2:00-3:00 PM" {...field} />
+                        <Input
+                          placeholder="e.g., MWF 2:00-3:00 PM"
+                          {...field}
+                        />
                       </FormControl>
                       <FormDescription>
                         When students can reach you for help
@@ -263,7 +295,9 @@ export default function CourseCreationWizard({
                           min="0"
                           placeholder="e.g., 30"
                           {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          onChange={(e) =>
+                            field.onChange(parseInt(e.target.value) || 0)
+                          }
                         />
                       </FormControl>
                       <FormDescription>
@@ -288,13 +322,16 @@ export default function CourseCreationWizard({
                       <FormControl>
                         <LogoUploader
                           isCustomizing={true}
-                          defaultLogoPath={field.value || '/university-logo.png'}
+                          defaultLogoPath={
+                            field.value || "/university-logo.png"
+                          }
                           onLogoChange={(path) => field.onChange(path)}
                           courseId={null}
                         />
                       </FormControl>
                       <FormDescription>
-                        Upload your university or institution logo (will be used across all courses)
+                        Upload your university or institution logo (will be used
+                        across all courses)
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -327,36 +364,51 @@ export default function CourseCreationWizard({
             {/* Step 5: Review */}
             {currentStep === 5 && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold mb-4">Review Your Course</h3>
+                <h3 className="text-lg font-semibold mb-4">
+                  Review Your Course
+                </h3>
 
                 <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <span className="font-medium">Course Name:</span> {form.watch('courseName')}
+                    <span className="font-medium">Course Name:</span>{" "}
+                    {form.watch("courseName")}
                   </div>
                   <div>
-                    <span className="font-medium">Professor:</span> {form.watch('professorName')}
+                    <span className="font-medium">Professor:</span>{" "}
+                    {form.watch("professorName")}
                   </div>
                   <div>
                     <span className="font-medium">Sections:</span>
                     <div className="flex gap-2 mt-1 flex-wrap">
-                      {form.watch('sections').map((section) => (
-                        <Badge key={section} variant={section === form.watch('sectionNumber') ? 'default' : 'secondary'}>
+                      {form.watch("sections").map((section) => (
+                        <Badge
+                          key={section}
+                          variant={
+                            section === form.watch("sectionNumber")
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
                           {section}
                         </Badge>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <span className="font-medium">Office Hours:</span> {form.watch('officeHours') || 'Not set'}
+                    <span className="font-medium">Office Hours:</span>{" "}
+                    {form.watch("officeHours") || "Not set"}
                   </div>
                   <div>
-                    <span className="font-medium">Total Students:</span> {form.watch('totalStudents') || 0}
+                    <span className="font-medium">Total Students:</span>{" "}
+                    {form.watch("totalStudents") || 0}
                   </div>
-                  {form.watch('news') && (
+                  {form.watch("news") && (
                     <div>
-                      <span className="font-medium">Initial Announcements:</span>
+                      <span className="font-medium">
+                        Initial Announcements:
+                      </span>
                       <div className="mt-1 text-sm text-gray-600 whitespace-pre-wrap">
-                        {form.watch('news')}
+                        {form.watch("news")}
                       </div>
                     </div>
                   )}
@@ -408,7 +460,7 @@ export default function CourseCreationWizard({
                 disabled={isCreating}
                 className="gap-2"
               >
-                {isCreating ? 'Creating...' : 'Create Course'}
+                {isCreating ? "Creating..." : "Create Course"}
                 <Check className="h-4 w-4" />
               </Button>
             )}
