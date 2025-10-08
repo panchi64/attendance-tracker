@@ -1,124 +1,80 @@
 "use client";
 
-import { useRef } from 'react';
-import Pencil from '../../components/icons/Pencil';
-import LogoUploader from '../../components/ui/LogoUploader';
+import { useState } from 'react';
 import { useCourse } from '../../context/CourseContext';
-import CourseSelector from './CourseSelector';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
+import { Button } from '../ui/button';
+import { Settings } from 'lucide-react';
+import Image from 'next/image';
+import CourseSettingsModal from '../course-management/CourseSettingsModal';
 
 export default function CourseHeader() {
-  const {
-    state,
-    dispatch,
-    handleLogoChange
-  } = useCourse();
-
-  // Refs for input fields
-  const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
-  const setInputRef = (name: string) => (el: HTMLInputElement | HTMLTextAreaElement | null) => {
-    inputRefs.current[name] = el;
-  };
+  const { state } = useCourse();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
-    <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
-      {/* Left Side: Logo & Office Hours */}
-      <div className="flex items-center gap-6 w-full sm:w-auto">
-        <LogoUploader
-          isCustomizing={state.isCustomizing}
-          defaultLogoPath={state.logoPath}
-          onLogoChange={handleLogoChange}
-          courseId={state.courseId}
-        />
-        <div className="flex-grow">
-          {state.isCustomizing && state.editing.officeHours ? (
-            <div>
-              <Label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</Label>
-              <Input
-                id="officeHoursInput"
-                ref={setInputRef('officeHours')}
-                type="text"
-                value={state.officeHours}
-                onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })}
-                onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })}
-                className="text-lg sm:text-xl font-medium border-b border-x-0 border-t-0 rounded-none px-0 focus-visible:ring-0 focus-visible:border-blue-500"
-              />
-            </div>
-          ) : (
-            <div
-              onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })}
-              className={`${state.isCustomizing ? "cursor-pointer group" : ""}`}
-            >
-              <div className="text-sm font-medium text-gray-500 flex items-center">
-                Office Hours
-                {state.isCustomizing && (
-                  <Pencil className="ml-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
-              </div>
-              <div className="text-lg sm:text-xl font-medium text-gray-800 mt-0.5">
-                {state.officeHours || "-"}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Right Side: Course Name, Section, Professor */}
-      <div className="text-right w-full sm:w-auto">
-        <div className="flex items-center justify-end">
-          {state.isCustomizing && state.editing.courseName ? (
-            <Input
-              ref={setInputRef('courseName')}
-              type="text"
-              value={state.courseName}
-              onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })}
-              onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}
-              className="text-2xl sm:text-3xl font-bold border-b border-x-0 border-t-0 rounded-none px-0 text-right focus-visible:ring-0 focus-visible:border-blue-500"
-              placeholder="Course Name"
+    <>
+      <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-300 bg-white gap-4">
+        {/* Left Side: Logo & Office Hours */}
+        <div className="flex items-center gap-6 w-full sm:w-auto">
+          {/* Logo Display */}
+          <div className="w-20 h-20 sm:w-24 sm:h-24 relative flex-shrink-0">
+            <Image
+              src={state.logoPath || '/university-logo.png'}
+              alt="Course Logo"
+              fill
+              sizes="(max-width: 640px) 80px, 96px"
+              className="object-contain"
+              priority
             />
-          ) : (
-            <div
-              className={`text-2xl sm:text-3xl font-bold text-gray-900 flex items-center group ${state.isCustomizing ? "cursor-pointer" : ""}`}
-              onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}
-            >
-              {state.isCustomizing && (
-                <Pencil className="mr-1.5 text-blue-500 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-              )}
+          </div>
+
+          {/* Office Hours */}
+          <div className="flex-grow">
+            <div className="text-sm font-medium text-gray-500">Office Hours</div>
+            <div className="text-lg sm:text-xl font-medium text-gray-800 mt-0.5">
+              {state.officeHours || "-"}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Course Name, Section, Professor, Settings Button */}
+        <div className="text-right w-full sm:w-auto space-y-2">
+          {/* Course Name & Section */}
+          <div className="flex items-center justify-end gap-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               {state.courseName}
-            </div>
-          )}
+            </h1>
+            <span className="text-2xl sm:text-3xl font-bold text-gray-500">-</span>
+            <span className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {state.sectionNumber}
+            </span>
+          </div>
 
-          <span className="text-2xl sm:text-3xl font-bold mx-2 text-gray-500">-</span>
+          {/* Professor Name */}
+          <div className="text-base sm:text-lg text-gray-600">
+            {state.professorName}
+          </div>
 
-          {/* Section dropdown */}
-          <CourseSelector />
-        </div>
-
-        <div className="mt-1.5">
-          {state.isCustomizing && state.editing.professorName ? (
-            <Input
-              ref={setInputRef('professorName')}
-              type="text"
-              value={state.professorName}
-              onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })}
-              onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}
-              className="text-base sm:text-lg text-right border-b border-x-0 border-t-0 rounded-none px-0 focus-visible:ring-0 focus-visible:border-blue-500 w-full"
-              placeholder="Professor Name"
-            />
-          ) : (
-            <div
-              className={`text-base sm:text-lg text-right text-gray-600 flex items-center justify-end group ${state.isCustomizing ? "cursor-pointer" : ""}`}
-              onClick={() => state.isCustomizing && dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}
+          {/* Settings Button */}
+          <div className="flex justify-end mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSettingsOpen(true)}
+              className="gap-2"
             >
-              {state.isCustomizing && (
-                <Pencil className="mr-1.5 text-blue-500 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              )}
-              {state.professorName}
-            </div>
-          )}
+              <Settings className="h-4 w-4" />
+              Course Settings
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Course Settings Modal */}
+      <CourseSettingsModal
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+      />
+    </>
   );
 }

@@ -85,13 +85,10 @@ const getInitialState = (): CourseState => {
     totalStudents: initialCourse.totalStudents,
     logoPath: initialCourse.logoPath,
     isLoading: true, // Always start loading, useEffect will fetch real data
-    isCustomizing: false,
     presentCount: 0,
     confirmationCode: "...",
     codeProgress: 100,
     availableCourses: [], // Populated by useEffect
-    dropdowns: { section: false, course: false },
-    editing: { courseName: false, professorName: false, officeHours: false, news: false, totalStudents: false },
     error: null
   };
 };
@@ -123,15 +120,6 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
       return { ...state, courseId: action.payload };
     case 'SET_AVAILABLE_COURSES':
       return { ...state, availableCourses: action.payload };
-    case 'TOGGLE_CUSTOMIZING':
-      const nextIsCustomizing = !state.isCustomizing;
-      return {
-        ...state,
-        isCustomizing: nextIsCustomizing,
-        // Only reset editors when *entering* customize mode for better editing flow? No, reset on toggle.
-        editing: getInitialState().editing, // Reset editors always on toggle
-        dropdowns: getInitialState().dropdowns, // Close dropdowns always
-      };
     case 'SET_COURSE_NAME':
       return { ...state, courseName: action.payload };
     case 'SET_SECTION_NUMBER':
@@ -164,16 +152,6 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
       return { ...state, codeProgress: action.payload };
     case 'SET_PRESENT_COUNT':
       return { ...state, presentCount: action.payload };
-    case 'TOGGLE_SECTION_DROPDOWN':
-      return { ...state, dropdowns: { section: !state.dropdowns.section, course: false } };
-    case 'TOGGLE_COURSE_DROPDOWN':
-      return { ...state, dropdowns: { section: false, course: !state.dropdowns.course } };
-    case 'CLOSE_ALL_DROPDOWNS':
-      return { ...state, dropdowns: { section: false, course: false } };
-    case 'TOGGLE_EDITOR':
-      return { ...state, editing: { ...getInitialState().editing, [action.payload]: !state.editing[action.payload] } };
-    case 'CLOSE_ALL_EDITORS':
-      return { ...state, editing: getInitialState().editing };
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
     case 'SET_ERROR':
@@ -193,9 +171,7 @@ type CourseContextType = {
   switchToAnotherCourse: (courseId: string) => Promise<void>;
   createNewCourseAndSwitch: (courseName: string) => Promise<void>;
   deleteCurrentCourse: () => Promise<void>;
-  toggleCustomizing: () => void;
   handleLogoChange: (newLogoPath: string) => void;
-  addNewSection: () => void;
 };
 
 const CourseContext = createContext<CourseContextType | null>(null);
@@ -227,7 +203,7 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
   const saveOrUpdateCourse = useCallback(async () => {
     if (!state.courseName.trim()) {
       dispatch({ type: 'SET_ERROR', payload: 'Course name cannot be empty.' });
-      return;
+      throw new Error('Course name cannot be empty.');
     }
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
@@ -235,14 +211,13 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
       const savedCourse = await saveCoursePreferences(currentCoursePrefsForSave);
       dispatch({ type: 'INITIALIZE_PREFERENCES', payload: savedCourse });
       prevSavedPrefsJsonRef.current = JSON.stringify(savedCourse); // Update saved ref
-      alert(`Course "${savedCourse.courseName}" ${currentCoursePrefsForSave.id ? 'updated' : 'saved'}.`);
       if (!currentCoursePrefsForSave.id && savedCourse.id) { // If created
         const courses = await getAvailableCourses();
         dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
       }
-      dispatch({ type: 'TOGGLE_CUSTOMIZING' }); // Exit customize mode
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Failed to save course' });
+      throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -252,7 +227,6 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     if (selectedCourseId === state.courseId || state.isLoading) return;
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
-    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
     try {
       // First update the current course
       const coursePrefs = await switchCourse(selectedCourseId);
@@ -304,10 +278,10 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
       prevSavedPrefsJsonRef.current = JSON.stringify(newCoursePrefs); // Update saved ref
       const courses = await getAvailableCourses(); // Refresh list
       dispatch({ type: 'SET_AVAILABLE_COURSES', payload: courses });
-      alert(`Course "${newCoursePrefs.courseName}" created successfully.`);
     } catch (error) {
       console.error('Error creating new course:', error);
       dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : 'Failed to create.' });
+      throw error;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -315,16 +289,13 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
 
   const deleteCurrentCourse = useCallback(async () => {
     if (!state.courseId) return;
-    if (!window.confirm(`DELETE Course: "${state.courseName}"?\n\nThis is permanent and will remove all associated attendance data.`)) return;
 
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
-    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
 
     try {
       const success = await deleteCourse(state.courseId);
       if (success) {
-        alert(`Course "${state.courseName}" deleted.`);
         // Reload state to show the new current course
         const currentPrefs = await loadCurrentCoursePreferences();
         dispatch({ type: 'INITIALIZE_PREFERENCES', payload: currentPrefs });
@@ -343,25 +314,11 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.courseId, state.courseName]);
-
-  const toggleCustomizing = useCallback(() => {
-    dispatch({ type: 'TOGGLE_CUSTOMIZING' });
-  }, []);
+  }, [state.courseId]);
 
   const handleLogoChange = useCallback((newLogoPath: string) => {
     dispatch({ type: 'SET_LOGO_PATH', payload: newLogoPath });
   }, []);
-
-  const addNewSection = useCallback(() => {
-    const newSection = window.prompt("Enter new section number (e.g., 003):")?.trim();
-    if (newSection && !state.sections.includes(newSection)) {
-      const updatedSections = normalizeSections([...state.sections, newSection]);
-      dispatch({ type: 'SET_SECTIONS', payload: updatedSections });
-      dispatch({ type: 'SET_SECTION_NUMBER', payload: newSection });
-    }
-    dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });
-  }, [state.sections]);
 
   // Context value with state, dispatch, and helper methods
   const contextValue = useMemo(() => ({
@@ -371,18 +328,14 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     switchToAnotherCourse,
     createNewCourseAndSwitch,
     deleteCurrentCourse,
-    toggleCustomizing,
-    handleLogoChange,
-    addNewSection
+    handleLogoChange
   }), [
     state,
     saveOrUpdateCourse,
     switchToAnotherCourse,
     createNewCourseAndSwitch,
     deleteCurrentCourse,
-    toggleCustomizing,
-    handleLogoChange,
-    addNewSection
+    handleLogoChange
   ]);
 
   return (
