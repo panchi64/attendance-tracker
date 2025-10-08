@@ -1,6 +1,6 @@
 use crate::errors::AppError;
 use crate::models::attendance::{AttendanceRecord, SubmitAttendancePayload};
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 pub async fn record_attendance(
@@ -96,4 +96,27 @@ pub async fn fetch_todays_attendance_count(
     .await?;
 
     Ok(result.count) // Handle potential NULL by defaulting to 0
+}
+
+/// Transaction-aware version of record_attendance
+/// Use this when you need to record attendance as part of a larger transaction
+pub async fn record_attendance_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    course_id: Uuid,
+    payload: &SubmitAttendancePayload,
+) -> Result<AttendanceRecord, AppError> {
+    let record = sqlx::query_as!(
+        AttendanceRecord,
+        r#"
+        INSERT INTO attendance_records (course_id, student_name, student_id, timestamp)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        RETURNING id as "id!", course_id as "course_id: Uuid", student_name, student_id, timestamp
+        "#,
+        course_id,
+        payload.student_name,
+        payload.student_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(record)
 }

@@ -9,6 +9,7 @@ pub struct ConfirmationCodeResponse {
     code: String,
     expires_at: DateTime<Utc>,
     expires_in_seconds: i64,
+    refresh_interval_seconds: i64, // Tell frontend when to poll for next code
 }
 
 #[get("/confirmation-code/{course_id}")]
@@ -65,10 +66,14 @@ async fn get_confirmation_code_handler(
         let now = Utc::now();
         let expires_in_seconds = (expires_at_utc - now).num_seconds().max(0);
 
+        // Get the refresh interval from config
+        let refresh_interval_seconds = state.config.confirmation_code_duration.as_secs() as i64;
+
         Ok(HttpResponse::Ok().json(ConfirmationCodeResponse {
             code,
             expires_at: expires_at_utc,
             expires_in_seconds,
+            refresh_interval_seconds,
         }))
     } else {
         // This shouldn't happen, but just in case

@@ -22,6 +22,7 @@ pub struct SubmitAttendancePayload {
     pub student_name: String,
     pub student_id: String,
     pub confirmation_code: String,
+    pub device_fingerprint: String, // Browser fingerprint hash for device tracking
 }
 
 // Structure for API response (maybe just success message or the created record)

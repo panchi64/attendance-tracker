@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { getCachedFingerprint } from '../utils/fingerprint';
 
 export default function AttendanceForm() {
     // Form state
@@ -21,13 +22,13 @@ export default function AttendanceForm() {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     // Update the current time every second
-    useState(() => {
+    useEffect(() => {
         const timeInterval = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
 
         return () => clearInterval(timeInterval);
-    });
+    }, []);
 
     const handleSubmit = async (e: { preventDefault: () => void; }) => {
         e.preventDefault();
@@ -48,6 +49,9 @@ export default function AttendanceForm() {
         const courseId = urlParams.get('course') || 'default';
 
         try {
+            // Generate browser fingerprint for device tracking
+            const deviceFingerprint = await getCachedFingerprint();
+
             // Make actual API call to backend
             const response = await fetch('/api/attendance', {
                 method: 'POST',
@@ -58,7 +62,8 @@ export default function AttendanceForm() {
                     course_id: courseId,
                     student_name: studentName,
                     student_id: studentId,
-                    confirmation_code: confirmationCode
+                    confirmation_code: confirmationCode,
+                    device_fingerprint: deviceFingerprint
                 }),
             });
 

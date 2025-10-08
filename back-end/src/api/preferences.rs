@@ -63,6 +63,22 @@ pub async fn get_preferences_handler_public(
     Ok(HttpResponse::Ok().json(response))
 }
 
+/// Get the currently active course ID from AppState
+/// This endpoint is useful for students to check which course is currently active
+/// before submitting attendance
+#[get("/active-course")]
+pub async fn get_active_course_handler(state: web::Data<AppState>) -> Result<impl Responder, AppError> {
+    log::debug!("Fetching active course ID from AppState");
+    let active_id_lock = state.active_host_course_id.lock().unwrap();
+    let active_id = *active_id_lock;
+    drop(active_id_lock);
+
+    let response = PreferencesResponse {
+        current_course_id: active_id.map(|id| id.to_string()),
+    };
+    Ok(HttpResponse::Ok().json(response))
+}
+
 // Public version of update_preferences_handler without HostOnly middleware
 pub async fn update_preferences_handler_public(
     state: web::Data<AppState>,

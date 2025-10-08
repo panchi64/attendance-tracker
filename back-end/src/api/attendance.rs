@@ -10,14 +10,13 @@ use crate::{
     }, // Import WS types
 };
 use actix::Addr;
-use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
+use actix_web::{HttpResponse, Responder, post, web};
 use uuid::Uuid; // For sending messages to WS actor
 
 #[post("/attendance")]
 async fn submit_attendance_handler(
     state: web::Data<AppState>,
     payload: web::Json<SubmitAttendancePayload>,
-    req: HttpRequest, // Add the request parameter to get the IP
 ) -> Result<impl Responder, AppError> {
     log::debug!(
         "Received attendance submission for course_id: {}",
@@ -60,19 +59,21 @@ async fn submit_attendance_handler(
     }
     // --- End New Check ---
 
-    // Get the client's IP address
-    let ip_address = req
-        .connection_info()
-        .realip_remote_addr()
-        .unwrap_or("unknown")
-        .to_string();
+    // Get the device fingerprint from the payload (browser-generated)
+    let device_fingerprint = &payload.device_fingerprint;
 
-    log::debug!("Client IP for attendance submission: {}", ip_address);
+    log::debug!(
+        "Device fingerprint for attendance submission: {}",
+        device_fingerprint
+    );
 
     // 1. Check if device has already submitted attendance today
-    let device_already_submitted =
-        device_db::check_device_submission_today(&state.db_pool, submitted_course_id, &ip_address)
-            .await?;
+    let device_already_submitted = device_db::check_device_submission_today(
+        &state.db_pool,
+        submitted_course_id,
+        device_fingerprint,
+    )
+    .await?;
 
     if device_already_submitted {
         return Err(AppError::Conflict(
@@ -108,12 +109,25 @@ async fn submit_attendance_handler(
         submitted_course_id
     );
 
-    // 4. Record the device submission first
-    device_db::record_device_submission(&state.db_pool, submitted_course_id, &ip_address).await?;
+    // 4. & 5. Record device submission and attendance in a transaction for atomicity
+    // Start a transaction to ensure both operations succeed or both fail
+    let mut transaction = state.db_pool.begin().await.map_err(|e| {
+        AppError::InternalError(anyhow::anyhow!("Failed to start transaction: {}", e))
+    })?;
 
-    // 5. Record Attendance
+    // Record the device submission
+    device_db::record_device_submission_tx(&mut transaction, submitted_course_id, device_fingerprint)
+        .await?;
+
+    // Record attendance
     let record =
-        attendance_db::record_attendance(&state.db_pool, submitted_course_id, &payload).await?;
+        attendance_db::record_attendance_tx(&mut transaction, submitted_course_id, &payload).await?;
+
+    // Commit the transaction
+    transaction.commit().await.map_err(|e| {
+        AppError::InternalError(anyhow::anyhow!("Failed to commit transaction: {}", e))
+    })?;
+
     log::info!(
         "Attendance recorded successfully for student '{}' (ID: {}) in course {}",
         record.student_name,

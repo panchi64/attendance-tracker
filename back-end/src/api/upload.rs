@@ -30,9 +30,8 @@ async fn upload_logo_handler(
     // Verify course exists
     let _ = courses::fetch_course_by_id(&state.db_pool, course_id).await?;
 
-    // Construct the path using frontend_build_path from config
-    let base_uploads_dir = Path::new(&state.config.frontend_build_path) // Use config
-        .join("uploads")
+    // Construct the path using uploads_path from config
+    let base_uploads_dir = Path::new(&state.config.uploads_path)
         .join("logos");
 
     fs::create_dir_all(&base_uploads_dir).map_err(|io_error| {

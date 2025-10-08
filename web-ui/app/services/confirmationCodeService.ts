@@ -6,6 +6,7 @@ interface ConfirmationCodeResponse {
     code: string;
     expires_at: string;
     expires_in_seconds: number;
+    refresh_interval_seconds: number; // Server tells us when to poll for next code
 }
 
 let pendingRetryTimeout: NodeJS.Timeout | null = null;

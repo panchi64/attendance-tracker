@@ -13,6 +13,20 @@ import {
   CoursePreferences
 } from '../services/preferencesService';
 
+/**
+ * Normalize sections array by removing the default '000' section
+ * when multiple sections exist
+ * @param sections - Array of section strings
+ * @returns Normalized sections array
+ */
+function normalizeSections(sections: string[]): string[] {
+  // If there are multiple sections and '000' is among them, filter it out
+  if (sections.length > 1 && sections.includes('000')) {
+    return sections.filter(section => section !== '000').sort();
+  }
+  return sections.sort();
+}
+
 // Initial state setup
 const getInitialState = (): CourseState => {
   console.log("getInitialState called");
@@ -123,18 +137,15 @@ function courseReducer(state: CourseState, action: CourseAction): CourseState {
     case 'SET_SECTION_NUMBER':
       const newSections = state.sections.includes(action.payload)
         ? state.sections
-        : [...state.sections, action.payload].sort();
+        : normalizeSections([...state.sections, action.payload]);
       return { ...state, sectionNumber: action.payload, sections: newSections };
     case 'SET_SECTIONS':
-      // Filter out the default '000' section if other sections are being added
-      const filteredSections = action.payload.length > 1 && action.payload.includes('000')
-        ? action.payload.filter(section => section !== '000')
-        : action.payload;
-      const currentSectionValid = filteredSections.includes(state.sectionNumber);
+      const normalizedSections = normalizeSections(action.payload);
+      const currentSectionValid = normalizedSections.includes(state.sectionNumber);
       return {
         ...state,
-        sections: filteredSections.sort(),
-        sectionNumber: currentSectionValid ? state.sectionNumber : (filteredSections[0] || "000")
+        sections: normalizedSections,
+        sectionNumber: currentSectionValid ? state.sectionNumber : (normalizedSections[0] || "000")
       };
     case 'SET_PROFESSOR_NAME':
       return { ...state, professorName: action.payload };
@@ -345,13 +356,8 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
   const addNewSection = useCallback(() => {
     const newSection = window.prompt("Enter new section number (e.g., 003):")?.trim();
     if (newSection && !state.sections.includes(newSection)) {
-      // Create an array with the new section and filter out "000" if it exists and there will be multiple sections
-      const updatedSections = [...state.sections, newSection];
-      const filteredSections = updatedSections.length > 1 && updatedSections.includes('000')
-        ? updatedSections.filter(section => section !== '000')
-        : updatedSections;
-
-      dispatch({ type: 'SET_SECTIONS', payload: filteredSections });
+      const updatedSections = normalizeSections([...state.sections, newSection]);
+      dispatch({ type: 'SET_SECTIONS', payload: updatedSections });
       dispatch({ type: 'SET_SECTION_NUMBER', payload: newSection });
     }
     dispatch({ type: 'CLOSE_ALL_DROPDOWNS' });

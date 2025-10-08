@@ -2,6 +2,7 @@ use actix::{Actor, Context, Handler, Message, Recipient};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use crate::db::attendance as attendance_db;
 
 // --- Messages ---
 
@@ -38,19 +39,21 @@ pub struct AttendanceUpdate {
 // --- Actor Definition ---
 
 /// The central server actor managing WebSocket connections grouped by course.
-#[derive(Debug)]
 pub struct AttendanceServer {
     // Map course_id to a set of connected session recipients
     rooms: HashMap<Uuid, HashSet<Recipient<WsMessage>>>,
     // Map course_id to a map of session_id -> recipient for efficient disconnection
     sessions: HashMap<Uuid, HashMap<usize, Recipient<WsMessage>>>,
+    // Database pool for fetching initial attendance counts
+    db_pool: SqlitePool,
 }
 
 impl AttendanceServer {
-    pub fn new(_db_pool: SqlitePool) -> Self {
+    pub fn new(db_pool: SqlitePool) -> Self {
         AttendanceServer {
             rooms: HashMap::new(),
             sessions: HashMap::new(),
+            db_pool,
         }
     }
 
@@ -86,7 +89,7 @@ impl Actor for AttendanceServer {
 // --- Message Handlers ---
 
 impl Handler<Connect> for AttendanceServer {
-    type Result = usize; // Return initial count
+    type Result = actix::ResponseActFuture<Self, usize>; // Return future with initial count
 
     fn handle(&mut self, msg: Connect, _ctx: &mut Context<Self>) -> Self::Result {
         log::info!(
@@ -113,8 +116,33 @@ impl Handler<Connect> for AttendanceServer {
             self.rooms.get(&msg.course_id).map_or(0, |s| s.len())
         );
 
-        // The real count is sent async after connection establishes in ws.rs
-        0
+        // Fetch the initial attendance count from the database
+        let course_id = msg.course_id;
+        let db_pool = self.db_pool.clone();
+
+        Box::pin(
+            async move {
+                match attendance_db::fetch_todays_attendance_count(&db_pool, course_id).await {
+                    Ok(count) => {
+                        log::debug!(
+                            "Fetched initial attendance count for course {}: {}",
+                            course_id,
+                            count
+                        );
+                        count as usize
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to fetch initial attendance count for course {}: {}",
+                            course_id,
+                            e
+                        );
+                        0 // Return 0 on error
+                    }
+                }
+            }
+            .into_actor(self),
+        )
     }
 }
 

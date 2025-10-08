@@ -345,11 +345,18 @@ async fn main() -> IoResult<()> {
                                 web::post().to(api::preferences::update_preferences_handler_public),
                             ),
                     )
+                    // Active course endpoint for real-time sync
+                    .service(api::preferences::get_active_course_handler)
                     // WebSocket endpoint
                     .route("/ws/{course_id}", web::get().to(api::ws::ws_index_public)),
             )
             // --- Static File Serving ---
-            // .service(Files::new("/uploads", "../public/uploads").show_files_listing()) // Removed specific /uploads handler
+            // Serve uploads from dedicated uploads directory
+            .service(
+                Files::new("/uploads", &config.uploads_path)
+                    .show_files_listing()
+            )
+            // Serve frontend static files
             .service(
                 Files::new("/", &config.frontend_build_path)
                     .index_file("index.html")
