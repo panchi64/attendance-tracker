@@ -55,5 +55,7 @@ attendance.db
 # Application-specific build artifacts or generated content
 back-end/static_frontend/
 
+**/uploads/**
+
 # --- GENERAL ---
 .idea/
