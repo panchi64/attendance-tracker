@@ -10,14 +10,22 @@ use crate::{
     }, // Import WS types
 };
 use actix::Addr;
-use actix_web::{HttpResponse, Responder, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
 use uuid::Uuid; // For sending messages to WS actor
+use validator::Validate;
 
 #[post("/attendance")]
 async fn submit_attendance_handler(
     state: web::Data<AppState>,
+    req: HttpRequest,
     payload: web::Json<SubmitAttendancePayload>,
 ) -> Result<impl Responder, AppError> {
+    // Validate input lengths
+    payload.validate().map_err(|e| {
+        log::warn!("Attendance submission validation failed: {}", e);
+        AppError::BadClientData(format!("Invalid input: {}", e))
+    })?;
+
     log::debug!(
         "Received attendance submission for course_id: {}",
         payload.course_id
@@ -60,22 +68,54 @@ async fn submit_attendance_handler(
     // --- End New Check ---
 
     // Get the device fingerprint from the payload (browser-generated)
-    let device_fingerprint = &payload.device_fingerprint;
+    let client_fingerprint = &payload.device_fingerprint;
+
+    // Extract server-side components for stronger fingerprinting
+    // Using peer_addr to get actual IP (not spoofable via headers)
+    let peer_ip = req.peer_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Get User-Agent header
+    let user_agent = req.headers()
+        .get(actix_web::http::header::USER_AGENT)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("unknown");
+
+    // Combine client fingerprint with server-side signals
+    // Format: client_fp|ip|user_agent_hash
+    // We hash the user agent to keep the fingerprint length manageable
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    user_agent.hash(&mut hasher);
+    let ua_hash = hasher.finish();
+
+    let enhanced_fingerprint = format!("{}|{}|{:x}", client_fingerprint, peer_ip, ua_hash);
 
     log::debug!(
-        "Device fingerprint for attendance submission: {}",
-        device_fingerprint
+        "Enhanced device fingerprint: client={}, ip={}, ua_hash={:x}",
+        client_fingerprint,
+        peer_ip,
+        ua_hash
     );
 
     // 1. Check if device has already submitted attendance today
     let device_already_submitted = device_db::check_device_submission_today(
         &state.db_pool,
         submitted_course_id,
-        device_fingerprint,
+        &enhanced_fingerprint,
     )
     .await?;
 
     if device_already_submitted {
+        log::warn!(
+            "SECURITY: Duplicate attendance attempt blocked - course_id={}, student_id={}, enhanced_fingerprint={}, ip={}",
+            submitted_course_id,
+            payload.student_id,
+            enhanced_fingerprint,
+            peer_ip
+        );
         return Err(AppError::Conflict(
             "This device has already been used to mark attendance for this course today."
                 .to_string(),
@@ -91,6 +131,13 @@ async fn submit_attendance_handler(
     .await?;
 
     if student_already_submitted {
+        log::warn!(
+            "SECURITY: Duplicate student attendance blocked - course_id={}, student_id={}, student_name={}, ip={}",
+            submitted_course_id,
+            payload.student_id,
+            payload.student_name,
+            peer_ip
+        );
         return Err(AppError::Conflict(format!(
             "Student ID '{}' has already been marked present for this course today.",
             payload.student_id
@@ -98,12 +145,23 @@ async fn submit_attendance_handler(
     }
 
     // 3. Validate Confirmation Code
-    confirmation_codes::validate_code(
+    if let Err(e) = confirmation_codes::validate_code(
         &state.db_pool,
         submitted_course_id,
         &payload.confirmation_code,
     )
-    .await?;
+    .await
+    {
+        log::warn!(
+            "SECURITY: Failed confirmation code attempt - course_id={}, student_id={}, code_submitted={}, ip={}, reason={:?}",
+            submitted_course_id,
+            payload.student_id,
+            payload.confirmation_code,
+            peer_ip,
+            e
+        );
+        return Err(e);
+    }
     log::debug!(
         "Confirmation code validated successfully for course {}",
         submitted_course_id
@@ -115,8 +173,8 @@ async fn submit_attendance_handler(
         AppError::InternalError(anyhow::anyhow!("Failed to start transaction: {}", e))
     })?;
 
-    // Record the device submission
-    device_db::record_device_submission_tx(&mut transaction, submitted_course_id, device_fingerprint)
+    // Record the device submission with enhanced fingerprint
+    device_db::record_device_submission_tx(&mut transaction, submitted_course_id, &enhanced_fingerprint)
         .await?;
 
     // Record attendance
@@ -129,10 +187,12 @@ async fn submit_attendance_handler(
     })?;
 
     log::info!(
-        "Attendance recorded successfully for student '{}' (ID: {}) in course {}",
-        record.student_name,
+        "SECURITY: Attendance recorded successfully - course_id={}, student_id={}, student_name={}, ip={}, fingerprint={}",
+        submitted_course_id,
         record.student_id,
-        submitted_course_id
+        record.student_name,
+        peer_ip,
+        enhanced_fingerprint
     );
 
     // 6. Notify WebSocket clients

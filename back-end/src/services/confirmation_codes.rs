@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 use std::time::Duration;
 use uuid::Uuid;
 
-const CODE_LENGTH: usize = 6; // e.g., "AB3DE6"
+const CODE_LENGTH: usize = 8; // e.g., "AB3DE6F1" - 8 chars for better security (36^8 ≈ 2.8 trillion combinations)
 
 // Function to generate a new code and update the database for a specific course
 pub async fn generate_and_store_code(

@@ -1,10 +1,14 @@
 use actix_multipart::Multipart;
 use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
 use futures_util::TryStreamExt;
-use std::{fs, path::Path};
+use image::{ImageFormat, ImageReader};
+use std::{fs, path::Path, io::Cursor};
 use uuid::Uuid;
 
 use crate::{AppState, db::courses, errors::AppError};
+
+// Maximum upload size: 5MB
+const MAX_FILE_SIZE: usize = 5 * 1024 * 1024;
 
 #[post("/upload-logo")]
 async fn upload_logo_handler(
@@ -83,17 +87,50 @@ async fn upload_logo_handler(
                 let original_filename = filename.unwrap().to_string();
                 log::info!("Processing uploaded university logo file: {}", original_filename);
 
-                // Extract extension from original filename
-                let extension = std::path::Path::new(&original_filename)
-                    .extension()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .unwrap_or("png"); // Default extension
+                let mut file_data = Vec::new();
+                // Inner loop consumes `field`
+                while let Some(chunk) = field.try_next().await? {
+                    // Check file size limit to prevent memory exhaustion
+                    if file_data.len() + chunk.len() > MAX_FILE_SIZE {
+                        log::error!(
+                            "File upload rejected: size exceeds {}MB limit",
+                            MAX_FILE_SIZE / (1024 * 1024)
+                        );
+                        return Err(AppError::BadClientData(
+                            format!("File too large. Maximum size is {}MB", MAX_FILE_SIZE / (1024 * 1024))
+                        ));
+                    }
+                    file_data.extend_from_slice(&chunk);
+                }
 
-                // Use a fixed filename for university logo with the original extension
-                let university_logo_filename = format!("university-logo.{}", extension);
+                log::info!("Validating uploaded image content (size: {} bytes)", file_data.len());
 
-                // Use the constructed base_uploads_dir
-                let server_path_buf = base_uploads_dir.join(&university_logo_filename);
+                // Validate actual file content using magic bytes - not just extension
+                let img = ImageReader::new(Cursor::new(&file_data))
+                    .with_guessed_format()
+                    .map_err(|e| {
+                        log::error!("Failed to detect image format: {}", e);
+                        AppError::BadClientData("Invalid or corrupted image file".to_string())
+                    })?
+                    .decode()
+                    .map_err(|e| {
+                        log::error!("Failed to decode image: {}", e);
+                        AppError::BadClientData("Invalid image file - cannot decode".to_string())
+                    })?;
+
+                log::info!("Image validated successfully ({}x{})", img.width(), img.height());
+
+                // Force conversion to PNG to sanitize and ensure safe format
+                let mut png_buffer = Vec::new();
+                img.write_to(&mut Cursor::new(&mut png_buffer), ImageFormat::Png)
+                    .map_err(|e| {
+                        log::error!("Failed to convert image to PNG: {}", e);
+                        AppError::InternalError(anyhow::Error::new(e).context("PNG conversion failed"))
+                    })?;
+
+                // Always save as PNG regardless of original format
+                let safe_filename = "university-logo.png".to_string();
+                let server_path_buf = base_uploads_dir.join(&safe_filename);
                 let server_path = server_path_buf
                     .to_str()
                     .ok_or_else(|| {
@@ -103,31 +140,22 @@ async fn upload_logo_handler(
                     })?
                     .to_string();
 
-                // Clone server_path for the web::block *before* the inner loop consumes `field`
-                let server_path_for_block = server_path.clone();
+                saved_filename = Some(safe_filename.clone());
 
-                saved_filename = Some(university_logo_filename.clone());
+                // Clone path for the blocking task
+                let server_path_clone = server_path.clone();
 
-                let mut file_data = Vec::new();
-                // Inner loop consumes `field`
-                while let Some(chunk) = field.try_next().await? {
-                    file_data.extend_from_slice(&chunk);
-                }
-
-                // Write all data at once, using the early clone
+                // Write sanitized PNG data
                 let write_result_inner =
-                    web::block(move || std::fs::write(server_path_for_block, file_data))
+                    web::block(move || std::fs::write(server_path_clone, png_buffer))
                         .await
                         .map_err(|blocking_err| {
                             log::error!("Blocking task for file write failed: {}", blocking_err);
-                            // This matches the From<BlockingError> for AppError behavior
                             AppError::BlockingError(blocking_err.to_string())
                         })?;
 
                 write_result_inner.map_err(|io_err| {
                     log::error!("File write failed for path {}: {}", server_path, io_err);
-                    // Use the existing From<std::io::Error> for AppError conversion
-                    // This will create AppError::InternalError with context via anyhow
                     AppError::from(io_err)
                 })?;
 

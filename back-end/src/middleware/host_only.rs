@@ -46,23 +46,25 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let connection_info = req.connection_info().clone();
-        let remote_addr = connection_info.realip_remote_addr();
+        // Use peer_addr() to get the actual TCP connection IP (cannot be spoofed)
+        // Do NOT use realip_remote_addr() as it trusts X-Forwarded-For headers
         let peer_addr = req.peer_addr();
 
-        // More comprehensive localhost check
-        let is_localhost = remote_addr.is_some_and(|ip_str| {
-            ip_str == "127.0.0.1"
-                || ip_str == "::1"
-                || ip_str.starts_with("localhost")
-                || ip_str == "0.0.0.0"
-                || ip_str.starts_with("0:0:0:0:")
+        // Extract IP address from peer_addr
+        let peer_ip = peer_addr.map(|addr| addr.ip().to_string());
+
+        // Strict localhost check - only allow actual localhost addresses
+        let is_localhost = peer_ip.as_ref().is_some_and(|ip_str| {
+            ip_str == "127.0.0.1" || ip_str == "::1"
+            // Removed: 0.0.0.0 (means "all interfaces", not localhost)
+            // Removed: starts_with("localhost") (prevents localhost.evil.com)
+            // Removed: IPv6 0:0:0:0 variants
         });
 
         log::debug!(
-            "HostOnly middleware: remote_addr={:?}, peer_addr={:?}, is_localhost={}",
-            remote_addr,
+            "HostOnly middleware: peer_addr={:?}, peer_ip={:?}, is_localhost={}",
             peer_addr,
+            peer_ip,
             is_localhost
         );
 
@@ -76,9 +78,8 @@ where
             .boxed_local()
         } else {
             log::warn!(
-                "Forbidden access attempt to host-only route from non-local address: {:?} (Real IP: {:?})",
-                req.peer_addr(),
-                req.connection_info().realip_remote_addr()
+                "Forbidden access attempt to host-only route from non-local address: {:?}",
+                peer_ip
             );
 
             let (http_req, _payload) = req.into_parts();

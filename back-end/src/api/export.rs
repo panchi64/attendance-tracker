@@ -13,11 +13,30 @@ async fn export_csv_handler(
 
     // Fetch course details to include in filename (optional)
     let course = course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
-    let filename = format!(
-        "attendance_{}_{}.csv",
-        course.name.replace(" ", "_").to_lowercase(), // Sanitize name for filename
-        chrono::Local::now().format("%Y-%m-%d")
-    );
+
+    // Strict filename sanitization - only allow alphanumeric, dash, and underscore
+    // Also limit length to prevent issues
+    let safe_name: String = course.name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .take(50)
+        .collect();
+
+    // Use course ID for uniqueness even if name is sanitized to empty string
+    let filename = if safe_name.is_empty() {
+        format!(
+            "attendance_course_{}_{}.csv",
+            course_id,
+            chrono::Local::now().format("%Y%m%d")
+        )
+    } else {
+        format!(
+            "attendance_{}_{}_{}.csv",
+            course_id, // Include ID for uniqueness
+            safe_name,
+            chrono::Local::now().format("%Y%m%d") // No dashes to avoid confusion
+        )
+    };
 
 
     // Fetch attendance records

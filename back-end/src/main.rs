@@ -1,7 +1,8 @@
 use actix::Actor;
 use actix_cors::Cors;
 use actix_files::Files;
-use actix_web::{App, HttpResponse, HttpServer, middleware::Logger, web};
+use actix_governor::{Governor, GovernorConfigBuilder};
+use actix_web::{App, HttpResponse, HttpServer, middleware::{DefaultHeaders, Logger}, web};
 use anyhow::Result as AnyhowResult;
 use dotenvy::dotenv;
 use models::course::vec_string_to_json;
@@ -289,12 +290,27 @@ async fn main() -> IoResult<()> {
     });
 
     HttpServer::new(move || {
+        // Restrictive CORS - only allow same origin since frontend is served from same server
+        // This prevents cross-origin attacks while allowing local network access
         let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .supports_credentials()
+            .allowed_origin(&format!("http://{}:{}", config.server_host, config.server_port))
+            .allowed_origin(&format!("http://localhost:{}", config.server_port))
+            .allowed_origin(&format!("http://127.0.0.1:{}", config.server_port))
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+            .allowed_headers(vec![
+                actix_web::http::header::CONTENT_TYPE,
+                actix_web::http::header::ACCEPT,
+                actix_web::http::header::HeaderName::from_static("x-course-id"),
+            ])
             .max_age(3600);
+
+        // Rate limiting configuration - prevents brute force and DoS attacks
+        // 30 requests per minute per IP, with burst capacity of 50
+        let governor_conf = GovernorConfigBuilder::default()
+            .requests_per_minute(30)
+            .burst_size(50)
+            .finish()
+            .unwrap();
 
         // Index file path for SPA fallback
         let index_path = format!("{}/index.html", config.frontend_build_path);
@@ -302,7 +318,26 @@ async fn main() -> IoResult<()> {
         App::new()
             .app_data(shared_state.clone())
             .wrap(Logger::default())
+            .wrap(Governor::new(&governor_conf))
             .wrap(cors)
+            // Security headers to prevent various attacks
+            .wrap(
+                DefaultHeaders::new()
+                    .add(("X-Frame-Options", "DENY")) // Prevent clickjacking
+                    .add(("X-Content-Type-Options", "nosniff")) // Prevent MIME sniffing
+                    .add(("Referrer-Policy", "strict-origin-when-cross-origin")) // Control referrer info
+                    .add(("X-XSS-Protection", "1; mode=block")) // Enable XSS protection (legacy browsers)
+                    .add((
+                        "Content-Security-Policy",
+                        "default-src 'self'; \
+                         script-src 'self' 'unsafe-inline' 'unsafe-eval'; \
+                         style-src 'self' 'unsafe-inline'; \
+                         img-src 'self' data: blob:; \
+                         font-src 'self' data:; \
+                         connect-src 'self'; \
+                         frame-ancestors 'none';"
+                    )) // Content Security Policy
+            )
             // --- Management API (Host Only) ---
             .service(
                 web::scope("/api/admin")
@@ -319,36 +354,30 @@ async fn main() -> IoResult<()> {
                     .configure(api::ws::config), // WebSocket connection setup
             )
             // --- Public API (Local Network Access) ---
+            // Only attendance submission and read-only course info should be public
             .service(
                 web::scope("/api")
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
                     .configure(api::confirmation_codes::config)
-                    // Add upload logo handler to public API scope
-                    .configure(api::upload::config)
-                    // Courses endpoints grouped by resource
+                    // Read-only course endpoints for students
                     .service(
                         web::resource("/courses")
-                            .route(web::get().to(api::courses::get_courses_handler_public))
-                            .route(web::post().to(api::courses::create_course_handler_public)),
+                            .route(web::get().to(api::courses::get_courses_handler_public)),
                     )
                     .service(
                         web::resource("/courses/{id}")
-                            .route(web::get().to(api::courses::get_course_by_id_handler_public))
-                            .route(web::put().to(api::courses::update_course_handler_public)),
+                            .route(web::get().to(api::courses::get_course_by_id_handler_public)),
                     )
-                    // Preferences endpoints grouped by resource
+                    // Read-only preferences for frontend
                     .service(
                         web::resource("/preferences")
-                            .route(web::get().to(api::preferences::get_preferences_handler_public))
-                            .route(
-                                web::post().to(api::preferences::update_preferences_handler_public),
-                            ),
+                            .route(web::get().to(api::preferences::get_preferences_handler_public)),
                     )
-                    // Active course endpoint for real-time sync
+                    // Active course endpoint for real-time sync (read-only)
                     .service(api::preferences::get_active_course_handler)
-                    // WebSocket endpoint
-                    .route("/ws/{course_id}", web::get().to(api::ws::ws_index_public)),
+                    // REMOVED: POST /courses, PUT /courses/{id}, POST /preferences, POST /upload-logo, /ws/{course_id}
+                    // These are now ONLY available under /api/admin/* and /api/host/* with HostOnly middleware
             )
             // --- Static File Serving ---
             // Serve uploads from dedicated uploads directory

@@ -133,7 +133,11 @@ impl ResponseError for AppError {
             AppError::ExpiredCode => ("expired_code", "Confirmation code has expired.".to_string()),
             AppError::CourseNotActive(message) => ("course_not_active", message.clone()),
             AppError::Conflict(message) => ("conflict", message.clone()),
-            AppError::MultipartError(message) => ("upload_error", message.clone()), // Provide multipart error message
+            AppError::MultipartError(_) => {
+                // Log detailed error but don't expose internals to client
+                log::error!("Multipart processing error: {:?}", self);
+                ("upload_error", "Failed to process uploaded file. Please check the file format and size.".to_string())
+            },
             // Generic messages for internal errors - log the specific internal cause
             _ => {
                 log::error!("Error processing request (internal): {:?}", self); // Log the detailed error

@@ -9,6 +9,7 @@ use actix_web::{HttpResponse, Responder, delete, get, post, put, web};
 use chrono::NaiveDateTime;
 use serde::Serialize;
 use uuid::Uuid;
+use validator::Validate;
 
 // Transform Course DB model to API response (converting sections)
 #[derive(Debug, Serialize)]
@@ -52,6 +53,12 @@ async fn create_course_handler(
     state: web::Data<AppState>,
     payload: web::Json<CreateCoursePayload>,
 ) -> Result<impl Responder, AppError> {
+    // Validate input lengths
+    payload.validate().map_err(|e| {
+        log::warn!("Course creation validation failed: {}", e);
+        AppError::BadClientData(format!("Invalid input: {}", e))
+    })?;
+
     log::info!("Attempting to create course: {}", payload.name);
     let created_course = course_db::create_course(&state.db_pool, &payload).await?;
     log::info!("Successfully created course ID: {}", created_course.id);
@@ -108,6 +115,12 @@ async fn update_course_handler(
     path: web::Path<Uuid>,
     payload: web::Json<UpdateCoursePayload>,
 ) -> Result<impl Responder, AppError> {
+    // Validate input lengths
+    payload.validate().map_err(|e| {
+        log::warn!("Course update validation failed: {}", e);
+        AppError::BadClientData(format!("Invalid input: {}", e))
+    })?;
+
     let course_id = path.into_inner();
     log::info!("Attempting to update course ID: {}", course_id);
     let updated_course = course_db::update_course(&state.db_pool, course_id, &payload).await?;

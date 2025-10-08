@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid; // To link to course.id
+use validator::Validate;
 
 // Structure for database interaction
 #[derive(Debug, FromRow, Serialize, Deserialize)]
@@ -14,14 +15,23 @@ pub struct AttendanceRecord {
 }
 
 // Structure for API request (POST /api/attendance)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SubmitAttendancePayload {
     // Frontend sends course *name*? Or *id*? Frontend code uses 'courseId' from URL param `course`.
     // Let's assume frontend sends UUID string.
+    #[validate(length(min = 1, max = 36))]
     pub course_id: String, // Needs parsing to Uuid
+
+    #[validate(length(min = 1, max = 100))]
     pub student_name: String,
+
+    #[validate(length(min = 1, max = 50))]
     pub student_id: String,
+
+    #[validate(length(min = 1, max = 20))]
     pub confirmation_code: String,
+
+    #[validate(length(min = 1, max = 500))]
     pub device_fingerprint: String, // Browser fingerprint hash for device tracking
 }
 

@@ -5,17 +5,17 @@ use uuid::Uuid;
 pub async fn record_device_submission(
     pool: &SqlitePool,
     course_id: Uuid,
-    ip_address: &str,
+    device_fingerprint: &str,
 ) -> Result<(), AppError> {
     // Try to insert the device submission record
     // If it already exists for today, it will fail with a unique constraint error
     match sqlx::query!(
         r#"
-        INSERT INTO device_submissions (course_id, ip_address)
+        INSERT INTO device_submissions (course_id, device_fingerprint)
         VALUES ($1, $2)
         "#,
         course_id,
-        ip_address
+        device_fingerprint
     )
     .execute(pool)
     .await
@@ -39,7 +39,7 @@ pub async fn record_device_submission(
 pub async fn check_device_submission_today(
     pool: &SqlitePool,
     course_id: Uuid,
-    ip_address: &str,
+    device_fingerprint: &str,
 ) -> Result<bool, AppError> {
     // Get today's date in YYYY-MM-DD format
     let today = chrono::Utc::now()
@@ -51,12 +51,12 @@ pub async fn check_device_submission_today(
         r#"
         SELECT COUNT(*) as count
         FROM device_submissions
-        WHERE course_id = $1 
-        AND ip_address = $2 
+        WHERE course_id = $1
+        AND device_fingerprint = $2
         AND submission_date = $3
         "#,
         course_id,
-        ip_address,
+        device_fingerprint,
         today
     )
     .fetch_one(pool)
@@ -75,7 +75,7 @@ pub async fn record_device_submission_tx(
     // Try to insert the device submission record within the transaction
     match sqlx::query!(
         r#"
-        INSERT INTO device_submissions (course_id, ip_address)
+        INSERT INTO device_submissions (course_id, device_fingerprint)
         VALUES ($1, $2)
         "#,
         course_id,
