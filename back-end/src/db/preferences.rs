@@ -1,7 +1,7 @@
 use crate::errors::AppError;
+use crate::models::preferences::Preference;
 use sqlx::SqlitePool;
 use uuid::Uuid;
-use crate::models::preferences::Preference;
 
 const CURRENT_COURSE_ID_KEY: &str = "current_course_id";
 

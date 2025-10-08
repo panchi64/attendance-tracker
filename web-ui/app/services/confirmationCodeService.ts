@@ -52,7 +52,8 @@ export async function fetchConfirmationCode(courseId: string | null): Promise<Co
                 return {
                     code: "PENDING",
                     expires_at: new Date(Date.now() + (expirySeconds * 1000)).toISOString(),
-                    expires_in_seconds: expirySeconds
+                    expires_in_seconds: expirySeconds,
+                    refresh_interval_seconds: 300 // Default 5 minutes
                 };
             }
             throw new Error(`Failed to fetch confirmation code: ${response.status}`);
@@ -69,7 +70,8 @@ export async function fetchConfirmationCode(courseId: string | null): Promise<Co
         return {
             code: isMaxRetries ? "ERROR" : "PENDING",
             expires_at: new Date(Date.now() + 10000).toISOString(), // 10 seconds from now
-            expires_in_seconds: 10
+            expires_in_seconds: 10,
+            refresh_interval_seconds: 300 // Default 5 minutes
         };
     }
 }

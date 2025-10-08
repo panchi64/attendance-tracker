@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { getCachedFingerprint } from '../utils/fingerprint';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Card, CardContent, CardTitle } from '../components/ui/card';
+import { Loader2, Check } from 'lucide-react';
 
 export default function AttendanceForm() {
     // Form state
@@ -125,36 +130,26 @@ export default function AttendanceForm() {
     if (submitted) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="max-w-md w-full bg-white rounded-lg shadow-lg border border-gray-200 p-8 text-center">
-                    <svg
-                        className="w-20 h-20 text-green-500 mx-auto mb-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                        />
-                    </svg>
-                    <h2 className="text-3xl font-bold mb-2 text-gray-900">Attendance Recorded!</h2>
-                    <p className="text-xl text-gray-600 mb-6">
-                        Thank you, {studentName}. Your attendance has been successfully recorded.
-                    </p>
-                    <p className="text-sm text-gray-500">
-                        {format(currentTime, "EEEE, MMMM do yyyy • h:mm a")}
-                    </p>
-                </div>
+                <Card className="max-w-md w-full text-center">
+                    <CardContent className="pt-8">
+                        <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                        <CardTitle className="text-3xl font-bold mb-2">Attendance Recorded!</CardTitle>
+                        <p className="text-xl text-gray-600 mb-6">
+                            Thank you, {studentName}. Your attendance has been successfully recorded.
+                        </p>
+                        <p className="text-sm text-gray-500">
+                            {format(currentTime, "EEEE, MMMM do yyyy • h:mm a")}
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-            <div className="max-w-md w-full bg-white rounded-lg shadow-lg border border-gray-200 p-8 mb-4">
+            <Card className="max-w-md w-full mb-4">
+                <CardContent className="pt-8">
                 <div className="flex items-center justify-center mb-6">
                     <div className="w-16 h-16 relative mr-4">
                         {/* This would be replaced with your actual university logo */}
@@ -183,69 +178,67 @@ export default function AttendanceForm() {
 
                 <form onSubmit={handleSubmit}>
                     <div className="mb-5">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="studentName">
+                        <Label htmlFor="studentName" className="block text-sm font-bold mb-2">
                             Full Name
-                        </label>
-                        <input
-                            className="appearance-none border border-gray-300 rounded-md w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        </Label>
+                        <Input
                             id="studentName"
                             type="text"
                             placeholder="Enter your full name"
                             value={studentName}
                             onChange={(e) => setStudentName(e.target.value)}
+                            className="py-3"
                         />
                     </div>
 
                     <div className="mb-5">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="studentId">
+                        <Label htmlFor="studentId" className="block text-sm font-bold mb-2">
                             Student ID
-                        </label>
-                        <input
-                            className="appearance-none border border-gray-300 rounded-md w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        </Label>
+                        <Input
                             id="studentId"
                             type="text"
                             placeholder="Enter your student ID"
                             value={studentId}
                             onChange={(e) => setStudentId(e.target.value)}
+                            className="py-3"
                         />
                     </div>
 
                     <div className="mb-6">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmationCode">
+                        <Label htmlFor="confirmationCode" className="block text-sm font-bold mb-2">
                             Confirmation Code
-                        </label>
-                        <input
-                            className={`appearance-none border ${errorType === 'invalid' || errorType === 'expired' ? 'border-red-500' : 'border-gray-300'} rounded-md w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                        </Label>
+                        <Input
                             id="confirmationCode"
                             type="text"
                             placeholder="Enter the confirmation code displayed in class"
                             value={confirmationCode}
                             onChange={(e) => setConfirmationCode(e.target.value)}
+                            className={`py-3 ${errorType === 'invalid' || errorType === 'expired' ? 'border-red-500' : ''}`}
                         />
                         {(errorType === 'invalid' || errorType === 'expired') && (
                             <p className="text-red-500 text-xs italic mt-1">Please check the confirmation code and try again.</p>
                         )}
                     </div>
 
-                    <button
-                        className={`w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition-colors duration-200 ease-in-out ${isSubmitting ? 'opacity-75 cursor-not-allowed' : ''}`}
+                    <Button
+                        className="w-full py-3"
                         type="submit"
                         disabled={isSubmitting}
                     >
                         {isSubmitting ? (
-                            <span className="flex items-center justify-center">
-                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
+                            <>
+                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                                 Submitting...
-                            </span>
+                            </>
                         ) : (
                             'Submit Attendance'
                         )}
-                    </button>
+                    </Button>
                 </form>
-            </div>
+                </CardContent>
+            </Card>
 
             <div className="text-sm text-gray-300">
                 {format(currentTime, "EEEE, MMMM do yyyy • h:mm:ss a")}

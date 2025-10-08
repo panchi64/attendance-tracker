@@ -5,6 +5,8 @@ import { useCourse } from '../../context/CourseContext';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useCurrentTime } from '../../hooks/useCurrentTime';
 import { format } from 'date-fns';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 export default function DashboardFooter() {
   const {
@@ -74,71 +76,71 @@ export default function DashboardFooter() {
       {isCreatingCourse ? (
         // --- Create Course Input Form ---
         <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
-          <input
+          <Input
             ref={newCourseInputRef}
             type="text"
             placeholder="New Course Name..."
             value={newCourseNameInput}
             onChange={(e) => setNewCourseNameInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleConfirmCreateCourse()}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
             disabled={state.isLoading}
           />
-          <button
+          <Button
             onClick={handleConfirmCreateCourse}
-            className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+            className="bg-green-500 hover:bg-green-600 text-white"
             disabled={state.isLoading || !newCourseNameInput.trim()}
           >
             {state.isLoading ? "Creating..." : "Create"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleCancelCreateCourse}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+            variant="secondary"
             disabled={state.isLoading}
           >
             Cancel
-          </button>
+          </Button>
         </div>
         // --- End Create Course Input Form ---
       ) : (
         // --- Standard Footer Buttons ---
         <div className="flex flex-wrap gap-2 sm:gap-3 relative justify-center sm:justify-end">
           {state.isCustomizing && state.courseId && (
-            <button
+            <Button
               title="Delete Current Course"
-              className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-xs sm:text-sm shadow-sm transition-colors disabled:opacity-50"
+              variant="destructive"
+              size="sm"
               onClick={handleDeleteCurrentCourse}
               disabled={state.isLoading}
             >
               Delete Course
-            </button>
+            </Button>
           )}
           {state.isCustomizing ? (
-            <button
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+            <Button
+              variant="default"
               onClick={saveOrUpdateCourse}
               disabled={state.isLoading || !state.courseName.trim()}
             >
               {state.isLoading ? "Saving..." : "Save Changes"}
-            </button>
+            </Button>
           ) : (
-            <button
-              className="px-4 py-2 bg-gray-200 text-gray-400 rounded-md text-sm shadow-sm cursor-not-allowed"
+            <Button
+              variant="secondary"
               disabled={true}
             >
               Save Changes
-            </button>
+            </Button>
           )}
           <div className="relative" ref={courseDropdownRef}>
-            <button
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50"
+            <Button
+              variant="secondary"
               onClick={() => dispatch({ type: 'TOGGLE_COURSE_DROPDOWN' })}
               disabled={state.isLoading || state.isCustomizing}
               aria-haspopup="true"
               aria-expanded={state.dropdowns.course}
             >
               Switch Course
-            </button>
+            </Button>
             {state.dropdowns.course && (
               <div className="absolute right-0 bottom-full mb-2 w-56 bg-white rounded-md shadow-lg z-20 border border-gray-200">
                 <ul className="py-1 max-h-64 overflow-y-auto">
@@ -166,13 +168,13 @@ export default function DashboardFooter() {
               </div>
             )}
           </div>
-          <button
-            className={`px-4 py-2 rounded-md text-sm shadow-sm transition-colors disabled:opacity-50 ${state.isCustomizing ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900'}`}
+          <Button
+            className={state.isCustomizing ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900'}
             onClick={() => { if (state.isCustomizing) { saveOrUpdateCourse(); } else { dispatch({ type: 'TOGGLE_CUSTOMIZING' }); } }}
             disabled={state.isLoading}
           >
             {state.isCustomizing ? 'Done & Save' : 'Customize'}
-          </button>
+          </Button>
         </div>
         // --- End Standard Footer Buttons ---
       )}

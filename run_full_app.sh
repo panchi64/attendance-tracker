@@ -75,10 +75,12 @@ if [ -f "${BACKEND_ENV_FILE}" ]; then
 else
     echo "Warning: ${BACKEND_ENV_FILE} not found. Creating it with default values."
     echo "Please ensure DATABASE_URL and other necessary variables are set!"
-    echo "FRONTEND_BUILD_PATH=${DESIRED_ENV_PATH}" > "${BACKEND_ENV_FILE}"
-    echo "DATABASE_URL=sqlite:database.db" >> "${BACKEND_ENV_FILE}"
+    echo "DATABASE_URL=sqlite:attendance_tracker.db" > "${BACKEND_ENV_FILE}"
+    echo "SERVER_HOST=0.0.0.0" >> "${BACKEND_ENV_FILE}"
+    echo "SERVER_PORT=8080" >> "${BACKEND_ENV_FILE}"
+    echo "FRONTEND_BUILD_PATH=${DESIRED_ENV_PATH}" >> "${BACKEND_ENV_FILE}"
+    echo "UPLOADS_PATH=./uploads" >> "${BACKEND_ENV_FILE}"
     echo "CONFIRMATION_CODE_DURATION_SECONDS=300" >> "${BACKEND_ENV_FILE}"
-    # Add other essential env vars if known
 fi
 echo "Backend environment prepared."
 

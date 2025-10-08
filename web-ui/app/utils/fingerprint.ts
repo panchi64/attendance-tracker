@@ -28,7 +28,7 @@ function getCanvasFingerprint(): string {
     ctx.fillText('Attendance Tracker 🎓', 4, 17);
 
     return canvas.toDataURL();
-  } catch (e) {
+  } catch {
     return 'canvas-error';
   }
 }
@@ -50,7 +50,7 @@ function getWebGLFingerprint(): string {
     const renderer = (gl as WebGLRenderingContext).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
 
     return `${vendor}~${renderer}`;
-  } catch (e) {
+  } catch {
     return 'webgl-error';
   }
 }
@@ -61,13 +61,17 @@ function getWebGLFingerprint(): string {
 function getAudioFingerprint(): Promise<string> {
   return new Promise((resolve) => {
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) {
+      // Type for webkit-prefixed AudioContext
+      type AudioContextType = typeof AudioContext | (new () => AudioContext);
+      const AudioContextConstructor: AudioContextType = window.AudioContext ||
+        (window as typeof window & { webkitAudioContext?: AudioContextType }).webkitAudioContext as AudioContextType;
+
+      if (!AudioContextConstructor) {
         resolve('no-audio');
         return;
       }
 
-      const context = new AudioContext();
+      const context = new AudioContextConstructor();
       const oscillator = context.createOscillator();
       const analyser = context.createAnalyser();
       const gainNode = context.createGain();
@@ -93,7 +97,7 @@ function getAudioFingerprint(): Promise<string> {
       };
 
       oscillator.start(0);
-    } catch (e) {
+    } catch {
       resolve('audio-error');
     }
   });
@@ -143,7 +147,7 @@ export async function generateFingerprint(): Promise<string> {
     cores: navigator.hardwareConcurrency?.toString() || 'unknown',
 
     // Device memory
-    memory: (navigator as any).deviceMemory?.toString() || 'unknown',
+    memory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory?.toString() || 'unknown',
 
     // Touch support
     touch: navigator.maxTouchPoints > 0 ? 'yes' : 'no',

@@ -12,6 +12,9 @@ import ConfirmationCode from './ConfirmationCode';
 import CourseNews from './CourseNews';
 import DashboardFooter from './DashboardFooter';
 import Image from 'next/image';
+import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { Separator } from '../ui/separator';
 
 export default function DashboardLayout() {
   const { state, dispatch } = useCourse();
@@ -64,12 +67,13 @@ export default function DashboardLayout() {
         <div className="bg-red-50 text-red-700 p-4 rounded-lg shadow-lg max-w-md">
           <h2 className="text-lg font-semibold mb-2">Error</h2>
           <p>{state.error}</p>
-          <button
+          <Button
             onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            variant="destructive"
+            className="mt-4"
           >
             Dismiss
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -89,21 +93,31 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200 relative">
+      <Card className="w-full max-w-6xl overflow-hidden relative">
         {/* Error Display */}
         {state.error && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded relative" role="alert">
             <strong className="font-bold block">Error!</strong>
             <span className="block sm:inline">{state.error}</span>
-            <button onClick={() => dispatch({ type: 'SET_ERROR', payload: null })} className="absolute top-0 bottom-0 right-0 px-4 py-3 text-red-500 hover:text-red-800" aria-label="Dismiss error">×</button>
+            <Button
+              onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
+              variant="ghost"
+              size="icon"
+              className="absolute top-0 bottom-0 right-0 text-red-500 hover:text-red-800"
+              aria-label="Dismiss error"
+            >
+              ×
+            </Button>
           </div>
         )}
 
         {/* Header Section */}
         <CourseHeader />
 
+        <Separator />
+
         {/* Main Content Area */}
-        <div className="flex flex-col md:flex-row bg-white">
+        <CardContent className="flex flex-col md:flex-row p-0">
           {/* Left Side: Attendance Count & News */}
           <div className="w-full md:w-2/3 p-6 md:p-8">
             <AttendanceCounter />
@@ -130,7 +144,7 @@ export default function DashboardLayout() {
             </div>
             <ConfirmationCode />
           </div>
-        </div>
+        </CardContent>
 
         {/* Footer Section */}
         <DashboardFooter />
@@ -157,13 +171,15 @@ export default function DashboardLayout() {
         {/* Loading Overlay - show when loading but we already have a courseId */}
         {state.isLoading && state.courseId && (
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-xl">
-              <div className="w-12 h-12 border-4 border-blue-400 border-t-blue-700 rounded-full animate-spin mx-auto"></div>
-              <p className="mt-4 text-gray-700">Processing...</p>
-            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="w-12 h-12 border-4 border-blue-400 border-t-blue-700 rounded-full animate-spin mx-auto"></div>
+                <p className="mt-4 text-gray-700">Processing...</p>
+              </CardContent>
+            </Card>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

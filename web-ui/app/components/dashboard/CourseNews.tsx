@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { useCourse } from '../../context/CourseContext';
 import Pencil from '../../components/icons/Pencil';
+import { Textarea } from '../ui/textarea';
 
 export default function CourseNews() {
   const { state, dispatch } = useCourse();
@@ -18,9 +19,9 @@ export default function CourseNews() {
       <h2 className="text-xl sm:text-2xl font-bold mb-3 text-gray-800">News / Comments</h2>
 
       {state.isCustomizing && state.editing.news ? (
-        <textarea
+        <Textarea
           ref={setInputRef('news')}
-          className="w-full h-40 border border-gray-300 p-3 rounded-md text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-base sm:text-lg whitespace-pre-wrap font-sans resize-y"
+          className="w-full h-40 p-3 text-base sm:text-lg whitespace-pre-wrap resize-y"
           value={state.news}
           onChange={(e) => dispatch({ type: 'SET_NEWS', payload: e.target.value })}
           onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'news' })}

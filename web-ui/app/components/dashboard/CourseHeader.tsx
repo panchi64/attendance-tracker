@@ -5,6 +5,8 @@ import Pencil from '../../components/icons/Pencil';
 import LogoUploader from '../../components/ui/LogoUploader';
 import { useCourse } from '../../context/CourseContext';
 import CourseSelector from './CourseSelector';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 export default function CourseHeader() {
   const {
@@ -32,15 +34,15 @@ export default function CourseHeader() {
         <div className="flex-grow">
           {state.isCustomizing && state.editing.officeHours ? (
             <div>
-              <label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</label>
-              <input
+              <Label htmlFor="officeHoursInput" className="block text-sm font-medium text-gray-500 mb-1">Office Hours</Label>
+              <Input
                 id="officeHoursInput"
                 ref={setInputRef('officeHours')}
                 type="text"
                 value={state.officeHours}
                 onChange={(e) => dispatch({ type: 'SET_OFFICE_HOURS', payload: e.target.value })}
                 onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'officeHours' })}
-                className="text-lg sm:text-xl font-medium text-gray-800 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full"
+                className="text-lg sm:text-xl font-medium border-b border-x-0 border-t-0 rounded-none px-0 focus-visible:ring-0 focus-visible:border-blue-500"
               />
             </div>
           ) : (
@@ -66,13 +68,13 @@ export default function CourseHeader() {
       <div className="text-right w-full sm:w-auto">
         <div className="flex items-center justify-end">
           {state.isCustomizing && state.editing.courseName ? (
-            <input
+            <Input
               ref={setInputRef('courseName')}
               type="text"
               value={state.courseName}
               onChange={(e) => dispatch({ type: 'SET_COURSE_NAME', payload: e.target.value })}
               onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'courseName' })}
-              className="text-2xl sm:text-3xl font-bold text-gray-900 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent text-right"
+              className="text-2xl sm:text-3xl font-bold border-b border-x-0 border-t-0 rounded-none px-0 text-right focus-visible:ring-0 focus-visible:border-blue-500"
               placeholder="Course Name"
             />
           ) : (
@@ -95,13 +97,13 @@ export default function CourseHeader() {
 
         <div className="mt-1.5">
           {state.isCustomizing && state.editing.professorName ? (
-            <input
+            <Input
               ref={setInputRef('professorName')}
               type="text"
               value={state.professorName}
               onChange={(e) => dispatch({ type: 'SET_PROFESSOR_NAME', payload: e.target.value })}
               onBlur={() => dispatch({ type: 'TOGGLE_EDITOR', payload: 'professorName' })}
-              className="text-base sm:text-lg text-right text-gray-600 border-b border-gray-300 focus:outline-none focus:border-blue-500 bg-transparent w-full"
+              className="text-base sm:text-lg text-right border-b border-x-0 border-t-0 rounded-none px-0 focus-visible:ring-0 focus-visible:border-blue-500 w-full"
               placeholder="Professor Name"
             />
           ) : (

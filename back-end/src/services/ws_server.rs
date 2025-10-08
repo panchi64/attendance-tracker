@@ -1,4 +1,4 @@
-use actix::{Actor, Context, Handler, Message, Recipient};
+use actix::{Actor, Context, Handler, Message, Recipient, WrapFuture};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
