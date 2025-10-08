@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Settings } from 'lucide-react';
 import Image from 'next/image';
 import CourseSettingsModal from '../course-management/CourseSettingsModal';
+import SectionSelector from './SectionSelector';
 
 export default function CourseHeader() {
   const { state } = useCourse();
@@ -25,6 +26,7 @@ export default function CourseHeader() {
               sizes="(max-width: 640px) 80px, 96px"
               className="object-contain"
               priority
+              unoptimized
             />
           </div>
 
@@ -45,9 +47,7 @@ export default function CourseHeader() {
               {state.courseName}
             </h1>
             <span className="text-2xl sm:text-3xl font-bold text-gray-500">-</span>
-            <span className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {state.sectionNumber}
-            </span>
+            <SectionSelector />
           </div>
 
           {/* Professor Name */}

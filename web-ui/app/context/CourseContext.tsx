@@ -169,7 +169,7 @@ type CourseContextType = {
   // Helper methods for common operations
   saveOrUpdateCourse: () => Promise<void>;
   switchToAnotherCourse: (courseId: string) => Promise<void>;
-  createNewCourseAndSwitch: (courseName: string) => Promise<void>;
+  createNewCourseAndSwitch: (courseName: string, initialData?: Partial<Omit<CoursePreferences, 'id' | 'courseName'>>) => Promise<void>;
   deleteCurrentCourse: () => Promise<void>;
   handleLogoChange: (newLogoPath: string) => void;
 };
@@ -264,7 +264,7 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     }
   }, [state.courseId, state.isLoading]);
 
-  const createNewCourseAndSwitch = useCallback(async (courseName: string) => {
+  const createNewCourseAndSwitch = useCallback(async (courseName: string, initialData?: Partial<Omit<CoursePreferences, 'id' | 'courseName'>>) => {
     const trimmedName = courseName.trim();
     if (!trimmedName) {
       dispatch({ type: 'SET_ERROR', payload: "New course name cannot be empty." });
@@ -273,7 +273,7 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
     try {
-      const newCoursePrefs = await createNewCourse(trimmedName); // Service handles backend POST
+      const newCoursePrefs = await createNewCourse(trimmedName, initialData); // Service handles backend POST with all data
       dispatch({ type: 'INITIALIZE_PREFERENCES', payload: newCoursePrefs }); // Update UI state
       prevSavedPrefsJsonRef.current = JSON.stringify(newCoursePrefs); // Update saved ref
       const courses = await getAvailableCourses(); // Refresh list

@@ -60,7 +60,7 @@ export default function CourseCreationWizard({
   open,
   onOpenChange,
 }: CourseCreationWizardProps) {
-  const { createNewCourseAndSwitch, dispatch } = useCourse();
+  const { createNewCourseAndSwitch } = useCourse();
   const [currentStep, setCurrentStep] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -82,17 +82,16 @@ export default function CourseCreationWizard({
     setIsCreating(true);
 
     try {
-      // Create the course via context
-      await createNewCourseAndSwitch(data.courseName);
-
-      // After successful creation, update all the other fields
-      dispatch({ type: 'SET_PROFESSOR_NAME', payload: data.professorName });
-      dispatch({ type: 'SET_OFFICE_HOURS', payload: data.officeHours || '' });
-      dispatch({ type: 'SET_NEWS', payload: data.news || '' });
-      dispatch({ type: 'SET_TOTAL_STUDENTS', payload: data.totalStudents || 0 });
-      dispatch({ type: 'SET_LOGO_PATH', payload: data.logoPath || '/university-logo.png' });
-      dispatch({ type: 'SET_SECTIONS', payload: data.sections });
-      dispatch({ type: 'SET_SECTION_NUMBER', payload: data.sectionNumber });
+      // Create the course via context with all form data
+      await createNewCourseAndSwitch(data.courseName, {
+        professorName: data.professorName,
+        officeHours: data.officeHours || '',
+        news: data.news || '',
+        totalStudents: data.totalStudents || 0,
+        logoPath: data.logoPath || '/university-logo.png',
+        sections: data.sections,
+        sectionNumber: data.sectionNumber,
+      });
 
       toast.success(`Course "${data.courseName}" created successfully!`);
       form.reset();

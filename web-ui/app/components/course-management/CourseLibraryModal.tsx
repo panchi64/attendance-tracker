@@ -40,6 +40,7 @@ export default function CourseLibraryModal({
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSwitchCourse = async (courseId: string) => {
     try {
@@ -70,15 +71,20 @@ export default function CourseLibraryModal({
   };
 
   const handleDeleteCourse = async () => {
-    if (!courseToDelete) return;
+    if (!courseToDelete || isDeleting) return;
 
+    setIsDeleting(true);
     try {
       await deleteCurrentCourse();
       toast.success(`Course "${courseToDelete.name}" deleted successfully`);
       setCourseToDelete(null);
+      // Close modal only after successful deletion
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete course');
+      setCourseToDelete(null);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -192,12 +198,13 @@ export default function CourseLibraryModal({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteCourse}
               className="bg-destructive hover:bg-destructive/90"
+              disabled={isDeleting}
             >
-              Delete Course
+              {isDeleting ? 'Deleting...' : 'Delete Course'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -95,6 +95,9 @@ const transformBackendCourse = (backendCourse: BackendCourse): CoursePreferences
  * Transform frontend course format to backend format for API requests (Create/Update)
  */
 const transformFrontendCourse = (frontendCourse: CoursePreferences): Omit<BackendCourse, 'id' | 'created_at' | 'updated_at' | 'confirmation_code' | 'confirmation_code_expires_at'> => {
+    // Strip cache-busting query parameters from logoPath before sending to backend
+    const cleanLogoPath = frontendCourse.logoPath.split('?')[0];
+
     // Returns the data structure expected by POST /api/courses or PUT /api/courses/{id}
     return {
         name: frontendCourse.courseName,
@@ -104,7 +107,7 @@ const transformFrontendCourse = (frontendCourse: CoursePreferences): Omit<Backen
         office_hours: frontendCourse.officeHours,
         news: frontendCourse.news,
         total_students: frontendCourse.totalStudents,
-        logo_path: frontendCourse.logoPath
+        logo_path: cleanLogoPath
     };
 };
 

@@ -78,6 +78,7 @@ const LogoUploader = ({
 
                 if (data.success) {
                     // Update to the server path after successful upload
+                    // Note: The parent component will add cache buster if needed
                     setLogoPath(data.logoPath);
 
                     // Call the callback if provided

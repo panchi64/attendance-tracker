@@ -90,6 +90,48 @@ export default function CourseSettingsModal({
     }
   }, [open, state, form]);
 
+  // Helper function to immediately update context and persist
+  const updateContextAndSave = async (updates: Partial<CourseFormValues>) => {
+    // Update form state
+    Object.entries(updates).forEach(([key, value]) => {
+      form.setValue(key as keyof CourseFormValues, value, { shouldDirty: true });
+    });
+
+    // Update context state immediately
+    if (updates.courseName !== undefined) {
+      dispatch({ type: 'SET_COURSE_NAME', payload: updates.courseName });
+    }
+    if (updates.professorName !== undefined) {
+      dispatch({ type: 'SET_PROFESSOR_NAME', payload: updates.professorName });
+    }
+    if (updates.officeHours !== undefined) {
+      dispatch({ type: 'SET_OFFICE_HOURS', payload: updates.officeHours });
+    }
+    if (updates.news !== undefined) {
+      dispatch({ type: 'SET_NEWS', payload: updates.news });
+    }
+    if (updates.totalStudents !== undefined) {
+      dispatch({ type: 'SET_TOTAL_STUDENTS', payload: updates.totalStudents });
+    }
+    if (updates.logoPath !== undefined) {
+      dispatch({ type: 'SET_LOGO_PATH', payload: updates.logoPath });
+    }
+    if (updates.sections !== undefined) {
+      dispatch({ type: 'SET_SECTIONS', payload: updates.sections });
+    }
+    if (updates.sectionNumber !== undefined) {
+      dispatch({ type: 'SET_SECTION_NUMBER', payload: updates.sectionNumber });
+    }
+
+    // Persist to backend and localStorage
+    try {
+      await saveOrUpdateCourse();
+    } catch (error) {
+      console.error('Failed to save changes:', error);
+      throw error;
+    }
+  };
+
   const onSubmit = async (data: CourseFormValues) => {
     setIsSaving(true);
 
@@ -210,8 +252,22 @@ export default function CourseSettingsModal({
                 <SectionManager
                   sections={form.watch('sections')}
                   currentSection={form.watch('sectionNumber')}
-                  onSectionsChange={(sections) => form.setValue('sections', sections, { shouldDirty: true })}
-                  onCurrentSectionChange={(section) => form.setValue('sectionNumber', section, { shouldDirty: true })}
+                  onSectionsChange={async (sections) => {
+                    try {
+                      await updateContextAndSave({ sections });
+                      toast.success('Sections updated');
+                    } catch {
+                      toast.error('Failed to update sections');
+                    }
+                  }}
+                  onCurrentSectionChange={async (section) => {
+                    try {
+                      await updateContextAndSave({ sectionNumber: section });
+                      toast.success(`Active section changed to ${section}`);
+                    } catch {
+                      toast.error('Failed to change active section');
+                    }
+                  }}
                 />
               </TabsContent>
 
@@ -270,7 +326,16 @@ export default function CourseSettingsModal({
                         <LogoUploader
                           isCustomizing={true}
                           defaultLogoPath={field.value || '/university-logo.png'}
-                          onLogoChange={(path) => field.onChange(path)}
+                          onLogoChange={async (path) => {
+                            try {
+                              // Add cache buster to force browser to reload the image
+                              const cacheBustedPath = `${path}?v=${Date.now()}`;
+                              await updateContextAndSave({ logoPath: cacheBustedPath });
+                              toast.success('Logo updated successfully');
+                            } catch {
+                              toast.error('Failed to save logo change');
+                            }
+                          }}
                           courseId={state.courseId}
                         />
                       </FormControl>
