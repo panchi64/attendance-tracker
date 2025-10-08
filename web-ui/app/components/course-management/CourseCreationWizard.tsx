@@ -35,7 +35,7 @@ const courseCreationSchema = z.object({
   professorName: z.string().min(1, "Professor name is required"),
   officeHours: z.string().optional(),
   news: z.string().optional(),
-  totalStudents: z.number().int().min(0, "Must be 0 or greater").optional(),
+  totalStudents: z.number().int().min(1, "Please enter the expected number of students (must be at least 1)"),
   logoPath: z.string().optional(),
   sections: z.array(z.string()).min(1, "At least one section is required"),
   sectionNumber: z.string().min(1, "Active section is required"),
@@ -71,7 +71,7 @@ export default function CourseCreationWizard({
       professorName: "",
       officeHours: "",
       news: "",
-      totalStudents: 0,
+      totalStudents: 25,
       logoPath: "/university-logo.png",
       sections: ["000"],
       sectionNumber: "000",
@@ -87,7 +87,7 @@ export default function CourseCreationWizard({
         professorName: data.professorName,
         officeHours: data.officeHours || "",
         news: data.news || "",
-        totalStudents: data.totalStudents || 0,
+        totalStudents: data.totalStudents || 25,
         logoPath: data.logoPath || "/university-logo.png",
         sections: data.sections,
         sectionNumber: data.sectionNumber,
@@ -288,15 +288,15 @@ export default function CourseCreationWizard({
                   name="totalStudents"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Total Students</FormLabel>
+                      <FormLabel>Total Students *</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          min="0"
+                          min="1"
                           placeholder="e.g., 30"
                           {...field}
                           onChange={(e) =>
-                            field.onChange(parseInt(e.target.value) || 0)
+                            field.onChange(parseInt(e.target.value) || 1)
                           }
                         />
                       </FormControl>
@@ -400,7 +400,7 @@ export default function CourseCreationWizard({
                   </div>
                   <div>
                     <span className="font-medium">Total Students:</span>{" "}
-                    {form.watch("totalStudents") || 0}
+                    {form.watch("totalStudents")}
                   </div>
                   {form.watch("news") && (
                     <div>
