@@ -1,4 +1,4 @@
-use crate::{db::attendance as attendance_db, db::courses as course_db, errors::AppError, AppState};
+use crate::{db::attendance as attendance_db, db::courses as course_db, errors::AppError, utils::sanitize::sanitize_csv_field, AppState};
 use actix_web::{get, web, HttpResponse, Responder};
 use csv::Writer;
 use uuid::Uuid;
@@ -48,13 +48,13 @@ async fn export_csv_handler(
     // Write header row
     wtr.write_record(["Timestamp", "Student Name", "Student ID", "Course Name", "Course ID"])?;
 
-    // Write data rows
+    // Write data rows with CSV injection protection
     for record in records {
         wtr.write_record(&[
             record.timestamp.to_string(), // Format as standard ISO 8601 string (YYYY-MM-DDTHH:MM:SS.mmm)
-            record.student_name.clone(),
-            record.student_id.clone(),
-            course.name.clone(),
+            sanitize_csv_field(&record.student_name),
+            sanitize_csv_field(&record.student_id),
+            sanitize_csv_field(&course.name),
             course_id.to_string(),
         ])?;
     }

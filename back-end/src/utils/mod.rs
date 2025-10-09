@@ -1,4 +1,5 @@
 pub mod pii;
+pub mod sanitize;
 
 use crate::config::Config;
 

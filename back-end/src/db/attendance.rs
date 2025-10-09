@@ -3,27 +3,6 @@ use crate::models::attendance::{AttendanceRecord, SubmitAttendancePayload};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
-pub async fn record_attendance(
-    pool: &SqlitePool,
-    course_id: Uuid,
-    payload: &SubmitAttendancePayload, // Pass payload for student details
-) -> Result<AttendanceRecord, AppError> {
-    let record = sqlx::query_as!(
-        AttendanceRecord,
-        r#"
-        INSERT INTO attendance_records (course_id, student_name, student_id, timestamp)
-        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-        RETURNING id as "id!", course_id as "course_id: Uuid", student_name, student_id, timestamp
-        "#, // Add "id!" hint for non-null PK
-        course_id,
-        payload.student_name,
-        payload.student_id,
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(record)
-}
-
 pub async fn fetch_attendance_for_course(
     pool: &SqlitePool,
     course_id: Uuid,

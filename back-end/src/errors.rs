@@ -131,12 +131,30 @@ impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let status = self.status_code();
         let (error_code, error_message) = match self {
-            AppError::NotFound(message) => ("not_found", message.clone()),
-            AppError::BadClientData(message) => ("bad_request", message.clone()),
+            // Generic messages for client, log details internally
+            AppError::NotFound(_) => {
+                log::debug!("Not found error details: {:?}", self);
+                ("not_found", "The requested resource was not found.".to_string())
+            },
+            AppError::BadClientData(message) => {
+                log::debug!("Bad client data details: {:?}", self);
+                // Only pass through safe validation messages, keep generic for everything else
+                if message.starts_with("Invalid input:") || message.contains("validation") {
+                    ("bad_request", "Invalid input. Please check your data.".to_string())
+                } else {
+                    ("bad_request", message.clone())
+                }
+            },
             AppError::InvalidCode => ("invalid_code", "Invalid confirmation code.".to_string()),
             AppError::ExpiredCode => ("expired_code", "Confirmation code has expired.".to_string()),
-            AppError::CourseNotActive(message) => ("course_not_active", message.clone()),
-            AppError::Conflict(message) => ("conflict", message.clone()),
+            AppError::CourseNotActive(_) => {
+                log::debug!("Course not active details: {:?}", self);
+                ("course_not_active", "This course is not currently active for attendance.".to_string())
+            },
+            AppError::Conflict(_) => {
+                log::debug!("Conflict error details: {:?}", self);
+                ("conflict", "The requested operation conflicts with existing data.".to_string())
+            },
             AppError::RateLimitExceeded { retry_after_secs } => {
                 // Build response with Retry-After header
                 let response_body = json!({

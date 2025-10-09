@@ -9,6 +9,7 @@ use crate::{
         ws_server::{AttendanceServer, AttendanceUpdate},
     },
     utils::pii::hash_pii,
+    utils::sanitize::{sanitize_plain_text, sanitize_alphanumeric, is_safe_content},
 };
 use actix::Addr;
 use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
@@ -27,12 +28,27 @@ async fn submit_attendance_handler(
         AppError::BadClientData(format!("Invalid input: {}", e))
     })?;
 
+    // Check for dangerous content and sanitize inputs
+    if !is_safe_content(&payload.student_name) || !is_safe_content(&payload.student_id) {
+        log::warn!("SECURITY: Dangerous content detected in attendance submission");
+        return Err(AppError::BadClientData("Input contains potentially dangerous content".to_string()));
+    }
+
+    // Create sanitized payload
+    let sanitized_payload = SubmitAttendancePayload {
+        course_id: payload.course_id.clone(),
+        student_name: sanitize_plain_text(&payload.student_name),
+        student_id: sanitize_alphanumeric(&payload.student_id),
+        confirmation_code: sanitize_alphanumeric(&payload.confirmation_code),
+        device_fingerprint: payload.device_fingerprint.clone(), // Validated by backend
+    };
+
     log::debug!(
         "Received attendance submission for course_id: {}",
-        payload.course_id
+        sanitized_payload.course_id
     );
 
-    let submitted_course_id = Uuid::parse_str(&payload.course_id).map_err(|_| {
+    let submitted_course_id = Uuid::parse_str(&sanitized_payload.course_id).map_err(|_| {
         AppError::BadClientData("Invalid course_id format in payload. Expected UUID.".to_string())
     })?;
 
@@ -84,7 +100,7 @@ async fn submit_attendance_handler(
     // --- End New Check ---
 
     // Get the device fingerprint from the payload (browser-generated)
-    let client_fingerprint = &payload.device_fingerprint;
+    let client_fingerprint = &sanitized_payload.device_fingerprint;
 
     // Get User-Agent header
     let user_agent = req.headers()
@@ -122,7 +138,7 @@ async fn submit_attendance_handler(
         log::warn!(
             "SECURITY: Duplicate attendance attempt blocked - course_id={}, student_id_hash={}, fingerprint_hash={}, ip_hash={}",
             submitted_course_id,
-            hash_pii(&payload.student_id),
+            hash_pii(&sanitized_payload.student_id),
             hash_pii(&enhanced_fingerprint),
             hash_pii(&peer_ip)
         );
@@ -140,7 +156,7 @@ async fn submit_attendance_handler(
     let student_already_submitted = attendance_db::check_student_attendance_today(
         &state.db_pool,
         submitted_course_id,
-        &payload.student_id,
+        &sanitized_payload.student_id,
     )
     .await?;
 
@@ -148,8 +164,8 @@ async fn submit_attendance_handler(
         log::warn!(
             "SECURITY: Duplicate student attendance blocked - course_id={}, student_id_hash={}, student_name_hash={}, ip_hash={}",
             submitted_course_id,
-            hash_pii(&payload.student_id),
-            hash_pii(&payload.student_name),
+            hash_pii(&sanitized_payload.student_id),
+            hash_pii(&sanitized_payload.student_name),
             hash_pii(&peer_ip)
         );
         // Record failed attempt for rate limiting
@@ -158,7 +174,7 @@ async fn submit_attendance_handler(
             .await;
         return Err(AppError::Conflict(format!(
             "Student ID '{}' has already been marked present for this course today.",
-            payload.student_id
+            sanitized_payload.student_id
         )));
     }
 
@@ -166,15 +182,15 @@ async fn submit_attendance_handler(
     if let Err(e) = confirmation_codes::validate_code(
         &state.db_pool,
         submitted_course_id,
-        &payload.confirmation_code,
+        &sanitized_payload.confirmation_code,
     )
     .await
     {
         log::warn!(
             "SECURITY: Failed confirmation code attempt - course_id={}, student_id_hash={}, code_hash={}, ip_hash={}, reason={:?}",
             submitted_course_id,
-            hash_pii(&payload.student_id),
-            hash_pii(&payload.confirmation_code),
+            hash_pii(&sanitized_payload.student_id),
+            hash_pii(&sanitized_payload.confirmation_code),
             hash_pii(&peer_ip),
             e
         );
@@ -201,7 +217,7 @@ async fn submit_attendance_handler(
 
     // Record attendance
     let record =
-        attendance_db::record_attendance_tx(&mut transaction, submitted_course_id, &payload).await?;
+        attendance_db::record_attendance_tx(&mut transaction, submitted_course_id, &sanitized_payload).await?;
 
     // Commit the transaction
     transaction.commit().await.map_err(|e| {

@@ -4,6 +4,7 @@ use crate::{
     errors::AppError,
     models::course::{Course, CreateCoursePayload, UpdateCoursePayload, json_to_vec_string},
     models::preferences::SwitchCoursePayload,
+    utils::sanitize::{sanitize_plain_text, sanitize_safe_text, sanitize_alphanumeric, is_safe_content},
 };
 use actix_web::{HttpResponse, Responder, delete, get, post, put, web};
 use chrono::NaiveDateTime;
@@ -48,6 +49,46 @@ impl From<Course> for CourseApiResponse {
     }
 }
 
+/// Sanitize course creation payload before processing
+fn sanitize_create_payload(payload: &CreateCoursePayload) -> Result<CreateCoursePayload, AppError> {
+    // Check for dangerous content first
+    if !is_safe_content(&payload.name) || !is_safe_content(&payload.professor_name) ||
+       !is_safe_content(&payload.office_hours) || !is_safe_content(&payload.news) {
+        return Err(AppError::BadClientData("Input contains potentially dangerous content".to_string()));
+    }
+
+    Ok(CreateCoursePayload {
+        name: sanitize_plain_text(&payload.name),
+        section_number: sanitize_alphanumeric(&payload.section_number),
+        sections: payload.sections.iter().map(|s| sanitize_alphanumeric(s)).collect(),
+        professor_name: sanitize_plain_text(&payload.professor_name),
+        office_hours: sanitize_safe_text(&payload.office_hours),
+        news: sanitize_safe_text(&payload.news),
+        total_students: payload.total_students,
+        logo_path: payload.logo_path.clone(), // Logo paths are validated during upload
+    })
+}
+
+/// Sanitize course update payload before processing
+fn sanitize_update_payload(payload: &UpdateCoursePayload) -> Result<UpdateCoursePayload, AppError> {
+    // Check for dangerous content first
+    if !is_safe_content(&payload.name) || !is_safe_content(&payload.professor_name) ||
+       !is_safe_content(&payload.office_hours) || !is_safe_content(&payload.news) {
+        return Err(AppError::BadClientData("Input contains potentially dangerous content".to_string()));
+    }
+
+    Ok(UpdateCoursePayload {
+        name: sanitize_plain_text(&payload.name),
+        section_number: sanitize_alphanumeric(&payload.section_number),
+        sections: payload.sections.iter().map(|s| sanitize_alphanumeric(s)).collect(),
+        professor_name: sanitize_plain_text(&payload.professor_name),
+        office_hours: sanitize_safe_text(&payload.office_hours),
+        news: sanitize_safe_text(&payload.news),
+        total_students: payload.total_students,
+        logo_path: payload.logo_path.clone(), // Logo paths are validated during upload
+    })
+}
+
 #[post("/courses")]
 async fn create_course_handler(
     state: web::Data<AppState>,
@@ -59,8 +100,11 @@ async fn create_course_handler(
         AppError::BadClientData(format!("Invalid input: {}", e))
     })?;
 
-    log::info!("Attempting to create course: {}", payload.name);
-    let created_course = course_db::create_course(&state.db_pool, &payload).await?;
+    // Sanitize all user inputs
+    let sanitized_payload = sanitize_create_payload(&payload)?;
+
+    log::info!("Attempting to create course: {}", sanitized_payload.name);
+    let created_course = course_db::create_course(&state.db_pool, &sanitized_payload).await?;
     log::info!("Successfully created course ID: {}", created_course.id);
 
     // If this is the *first* course created, maybe set it as current?
@@ -121,9 +165,12 @@ async fn update_course_handler(
         AppError::BadClientData(format!("Invalid input: {}", e))
     })?;
 
+    // Sanitize all user inputs
+    let sanitized_payload = sanitize_update_payload(&payload)?;
+
     let course_id = path.into_inner();
     log::info!("Attempting to update course ID: {}", course_id);
-    let updated_course = course_db::update_course(&state.db_pool, course_id, &payload).await?;
+    let updated_course = course_db::update_course(&state.db_pool, course_id, &sanitized_payload).await?;
     log::info!("Successfully updated course ID: {}", course_id);
     // Notify WebSocket clients about the update? (Future enhancement)
     Ok(HttpResponse::Ok().json(CourseApiResponse::from(updated_course)))

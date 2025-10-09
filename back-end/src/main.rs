@@ -25,8 +25,10 @@ mod utils;
 
 use config::Config;
 use db::database::create_db_pool;
+use middleware::csrf_protection::CsrfProtection;
 use middleware::host_only::HostOnly;
 use services::confirmation_codes::start_confirmation_code_generator;
+use services::csrf::{CsrfTokenStore, start_csrf_cleanup};
 use services::rate_limiter::{AttendanceRateLimiter, start_rate_limiter_cleanup};
 use services::ws_server::AttendanceServer;
 
@@ -36,6 +38,7 @@ pub struct AppState {
     ws_server: actix::Addr<AttendanceServer>,
     active_host_course_id: Arc<Mutex<Option<Uuid>>>,
     attendance_rate_limiter: AttendanceRateLimiter,
+    csrf_token_store: CsrfTokenStore,
 }
 
 async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
@@ -268,6 +271,13 @@ async fn main() -> IoResult<()> {
     // Start rate limiter cleanup task (cleanup every 5 minutes)
     start_rate_limiter_cleanup(attendance_rate_limiter.clone(), 300);
 
+    // Initialize CSRF token store
+    // Tokens valid for 1 hour (3600 seconds)
+    let csrf_token_store = CsrfTokenStore::new(3600);
+
+    // Start CSRF token cleanup task (cleanup every 10 minutes)
+    start_csrf_cleanup(csrf_token_store.clone(), 600);
+
     // Log the frontend path being used
     let frontend_path = Path::new(&config.frontend_build_path);
     log::info!(
@@ -333,6 +343,7 @@ async fn main() -> IoResult<()> {
         ws_server: ws_server.clone(),
         active_host_course_id: Arc::new(Mutex::new(initial_active_course_id)),
         attendance_rate_limiter: attendance_rate_limiter.clone(),
+        csrf_token_store: csrf_token_store.clone(),
     });
 
     HttpServer::new(move || {
@@ -347,6 +358,7 @@ async fn main() -> IoResult<()> {
                 actix_web::http::header::CONTENT_TYPE,
                 actix_web::http::header::ACCEPT,
                 actix_web::http::header::HeaderName::from_static("x-course-id"),
+                actix_web::http::header::HeaderName::from_static("x-csrf-token"),
             ])
             .max_age(3600);
 
@@ -396,7 +408,7 @@ async fn main() -> IoResult<()> {
                     .add((
                         "Content-Security-Policy",
                         "default-src 'self'; \
-                         script-src 'self' 'unsafe-inline' 'unsafe-eval'; \
+                         script-src 'self' 'unsafe-inline'; \
                          style-src 'self' 'unsafe-inline'; \
                          img-src 'self' data: blob:; \
                          font-src 'self' data:; \
@@ -404,12 +416,13 @@ async fn main() -> IoResult<()> {
                          frame-ancestors 'none'; \
                          base-uri 'self'; \
                          form-action 'self';"
-                    )) // Content Security Policy (unsafe-inline/eval needed for Next.js)
+                    )) // Content Security Policy (unsafe-inline needed for Next.js static build)
             )
             // --- Management API (Host Only) ---
             .service(
                 web::scope("/api/admin")
                     .wrap(HostOnly)
+                    .wrap(CsrfProtection) // Require CSRF tokens for admin operations
                     .configure(api::courses::config_host_only)
                     .configure(api::preferences::config)
                     .configure(api::upload::config)
@@ -425,6 +438,7 @@ async fn main() -> IoResult<()> {
             // Only attendance submission and read-only course info should be public
             .service(
                 web::scope("/api")
+                    .configure(api::auth::config) // CSRF token endpoint
                     .configure(api::attendance::config_public)
                     .configure(api::qrcode::config_public)
                     .configure(api::confirmation_codes::config)

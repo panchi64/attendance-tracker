@@ -1,4 +1,5 @@
 pub mod attendance;
+pub mod auth;
 pub mod confirmation_codes;
 pub mod courses;
 pub mod export;

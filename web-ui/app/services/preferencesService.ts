@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { fetchWithCsrf } from './csrfService';
 
 export interface CoursePreferences {
     id: string | null; // UUID string from backend, or null for new unsaved course
@@ -262,9 +263,8 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
             // Also update backend preference to match
             if (firstCourse.id) {
                 try {
-                    await fetch('/api/admin/preferences', {
+                    await fetchWithCsrf('/api/admin/preferences', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ current_course_id: firstCourse.id }),
                     });
                 } catch (error) {
@@ -322,9 +322,8 @@ export const saveCoursePreferences = async (coursePreferences: CoursePreferences
     console.log(`Saving course via ${method} to ${url}`, body);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithCsrf(url, {
             method: method,
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
 
@@ -445,9 +444,8 @@ export const createNewCourse = async (courseName: string, initialPreferences?: P
         // Update the backend preference to make this the current course
         if (savedCourse.id) {
             try {
-                await fetch('/api/admin/preferences', {
+                await fetchWithCsrf('/api/admin/preferences', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ current_course_id: savedCourse.id }),
                 });
                 // Update local storage currentCourseId (already handled in saveCoursePreferences, but redundant check is ok)
@@ -479,9 +477,8 @@ export const switchCourse = async (courseId: string): Promise<CoursePreferences 
     console.log(`Attempting to switch current course to ID: ${courseId}`);
     // 1. Update current course ID preference on the backend
     try {
-        const prefResponse = await fetch('/api/admin/preferences', {
+        const prefResponse = await fetchWithCsrf('/api/admin/preferences', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ current_course_id: courseId }),
         });
         if (!prefResponse.ok) {
@@ -538,7 +535,7 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
 
     try {
         // Delete from backend
-        const response = await fetch(`/api/admin/courses/${courseId}`, { method: 'DELETE' });
+        const response = await fetchWithCsrf(`/api/admin/courses/${courseId}`, { method: 'DELETE' });
 
         if (!response.ok && response.status !== 404) { // Allow 404 (already deleted is ok)
             const errorData = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
@@ -574,9 +571,8 @@ export const deleteCourse = async (courseId: string): Promise<boolean> => {
             if (updatedCurrentId) {
                 console.log(`Updating backend current course preference to: ${updatedCurrentId}`);
                 try {
-                    await fetch('/api/admin/preferences', {
+                    await fetchWithCsrf('/api/admin/preferences', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ current_course_id: updatedCurrentId }),
                     });
                 } catch (prefError) {

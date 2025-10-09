@@ -29,8 +29,8 @@ impl AttendanceRateLimiter {
         let mut attempts = self.attempts.lock().await;
         let now = Instant::now();
 
-        if let Some((count, last_attempt)) = attempts.get(&key) {
-            let elapsed = now.duration_since(*last_attempt);
+        if let Some((count, last_attempt)) = attempts.get(&key).copied() {
+            let elapsed = now.duration_since(last_attempt);
 
             // If window has passed, reset the counter
             if elapsed >= self.window {
@@ -39,7 +39,7 @@ impl AttendanceRateLimiter {
             }
 
             // Within the window, check if limit exceeded
-            if *count >= self.max_attempts {
+            if count >= self.max_attempts {
                 let retry_after = self.window.as_secs() - elapsed.as_secs();
                 log::warn!(
                     "SECURITY: Rate limit exceeded for course {} from IP {}. Attempts: {}. Retry after {} seconds.",
@@ -52,7 +52,7 @@ impl AttendanceRateLimiter {
             }
 
             // Increment attempt count
-            attempts.insert(key, (*count + 1, *last_attempt));
+            attempts.insert(key, (count + 1, last_attempt));
             Ok(())
         } else {
             // First attempt
@@ -67,17 +67,17 @@ impl AttendanceRateLimiter {
         let mut attempts = self.attempts.lock().await;
         let now = Instant::now();
 
-        if let Some((count, last_attempt)) = attempts.get(&key) {
-            let elapsed = now.duration_since(*last_attempt);
+        if let Some((count, last_attempt)) = attempts.get(&key).copied() {
+            let elapsed = now.duration_since(last_attempt);
 
             // If window hasn't passed, increment failure count
             if elapsed < self.window {
-                attempts.insert(key, (*count + 1, now));
+                attempts.insert(key, (count + 1, now));
                 log::debug!(
                     "Failed attempt recorded for course {} from IP {}. Total attempts: {}",
                     course_id,
                     ip,
-                    *count + 1
+                    count + 1
                 );
             } else {
                 // Window passed, reset counter

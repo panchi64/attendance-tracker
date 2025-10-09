@@ -2,40 +2,6 @@ use crate::errors::AppError;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
-pub async fn record_device_submission(
-    pool: &SqlitePool,
-    course_id: Uuid,
-    device_fingerprint: &str,
-) -> Result<(), AppError> {
-    // Try to insert the device submission record
-    // If it already exists for today, it will fail with a unique constraint error
-    match sqlx::query!(
-        r#"
-        INSERT INTO device_submissions (course_id, device_fingerprint)
-        VALUES ($1, $2)
-        "#,
-        course_id,
-        device_fingerprint
-    )
-    .execute(pool)
-    .await
-    {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // Check if this is a unique constraint violation
-            if let sqlx::Error::Database(db_err) = &e {
-                if db_err.is_unique_violation() {
-                    return Err(AppError::Conflict(
-                        "This device has already been used to mark attendance for this course today."
-                            .to_string(),
-                    ));
-                }
-            }
-            Err(AppError::SqlxError(e))
-        }
-    }
-}
-
 pub async fn check_device_submission_today(
     pool: &SqlitePool,
     course_id: Uuid,

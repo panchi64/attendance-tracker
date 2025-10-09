@@ -41,9 +41,11 @@ webbrowser = "1.0.5" # For opening browser
 anyhow = "1.0.100" # Error handling
 thiserror = "2.0.17" # Error handling derivation
 futures-util = "0.3.31" # For stream processing in multipart
-rand = "0.9.2" # For confirmation code generation
+rand = { version = "0.9.2", features = ["std", "std_rng"] } # For confirmation code generation
 validator = { version = "0.19.0", features = ["derive"] } # Input validation
 sha2 = "0.10.8" # For PII hashing in logs
+regex = "1.11.1" # For input sanitization
+once_cell = "1.20.2" # For lazy static initialization
 
 [profile.release]
 lto = true

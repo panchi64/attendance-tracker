@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import React from "react";
 import { ToasterProvider } from "./components/ToasterProvider";
+import { CsrfTokenInitializer } from "./components/CsrfTokenInitializer";
 
 export const metadata: Metadata = {
     title: "Attendance Tracker - Dashboard",
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body
         className={`antialiased`}
       >
+        <CsrfTokenInitializer />
         {children}
         <ToasterProvider />
       </body>

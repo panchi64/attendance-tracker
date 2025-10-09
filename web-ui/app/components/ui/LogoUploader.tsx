@@ -1,6 +1,7 @@
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import Image from 'next/image';
 import Pencil from '../icons/Pencil';
+import { getCsrfToken } from '../../services/csrfService';
 
 interface LogoUploaderProps {
     isCustomizing: boolean;
@@ -67,10 +68,16 @@ const LogoUploader = ({
                 formData.append('logo', file);
                 formData.append('courseId', courseId);
 
+                // Get CSRF token for protected endpoint
+                const csrfToken = await getCsrfToken();
+
                 const response = await fetch('/api/admin/upload-logo', {
                     method: 'POST',
                     body: formData,
-                    headers: { 'X-Course-ID': courseId }
+                    headers: {
+                        'X-Course-ID': courseId,
+                        'X-CSRF-Token': csrfToken
+                    }
                 });
 
                 const data = await response.json();
