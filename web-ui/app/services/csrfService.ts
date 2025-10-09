@@ -20,10 +20,15 @@ export async function fetchCsrfToken(): Promise<string> {
     }
 
     const data = await response.json();
-    csrfToken = data.token;
 
+    if (!data.token || typeof data.token !== 'string') {
+      throw new Error('Invalid CSRF token received from server');
+    }
+
+    csrfToken = data.token;
     console.log('CSRF token fetched successfully');
-    return csrfToken;
+
+    return data.token;
   } catch (error) {
     console.error('Error fetching CSRF token:', error);
     throw error;

@@ -151,9 +151,10 @@ impl ResponseError for AppError {
                 log::debug!("Course not active details: {:?}", self);
                 ("course_not_active", "This course is not currently active for attendance.".to_string())
             },
-            AppError::Conflict(_) => {
+            AppError::Conflict(message) => {
                 log::debug!("Conflict error details: {:?}", self);
-                ("conflict", "The requested operation conflicts with existing data.".to_string())
+                // Pass through the specific conflict message for user-facing errors
+                ("conflict", message.clone())
             },
             AppError::RateLimitExceeded { retry_after_secs } => {
                 // Build response with Retry-After header
