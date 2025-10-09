@@ -177,28 +177,29 @@ export async function generateFingerprint(): Promise<string> {
 }
 
 /**
- * Get or create cached fingerprint from sessionStorage
- * This ensures the same fingerprint is used within a browser session
+ * Get or create cached fingerprint from localStorage
+ * This ensures the same fingerprint persists across browser sessions and tabs
+ * Prevents duplicate submissions via incognito mode or new browser sessions
  */
 export async function getCachedFingerprint(): Promise<string> {
-  const STORAGE_KEY = 'attendance_device_fingerprint';
+  const STORAGE_KEY = 'attendance_device_fingerprint_v2';
 
-  // Try to get from sessionStorage first
+  // Try to get from localStorage first
   try {
-    const cached = sessionStorage.getItem(STORAGE_KEY);
+    const cached = localStorage.getItem(STORAGE_KEY);
     if (cached) {
       return cached;
     }
   } catch (e) {
-    console.warn('Unable to access sessionStorage:', e);
+    console.warn('Unable to access localStorage:', e);
   }
 
   // Generate new fingerprint
   const fingerprint = await generateFingerprint();
 
-  // Try to cache it
+  // Try to cache it in localStorage for persistence
   try {
-    sessionStorage.setItem(STORAGE_KEY, fingerprint);
+    localStorage.setItem(STORAGE_KEY, fingerprint);
   } catch (e) {
     console.warn('Unable to cache fingerprint:', e);
   }

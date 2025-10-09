@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDateTime, Utc};
 use rand::distr::Alphanumeric;
-use rand::{Rng, rng};
+use rand::{Rng, rngs::OsRng};
 use sqlx::SqlitePool;
 use std::time::Duration;
 use uuid::Uuid;
@@ -17,7 +17,8 @@ pub async fn generate_and_store_code(
     course_id: Uuid,
     validity_duration: Duration,
 ) -> Result<String, sqlx::Error> {
-    let code: String = rng()
+    // Use OsRng for cryptographically secure random number generation
+    let code: String = OsRng
         .sample_iter(&Alphanumeric)
         .take(CODE_LENGTH)
         .map(char::from)

@@ -9,17 +9,15 @@ use actix::{
 };
 use actix_web::{Error, HttpRequest, HttpResponse, get, web};
 use actix_web_actors::ws;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
-static NEXT_SESSION_ID: AtomicUsize = AtomicUsize::new(1);
 
 // The WebSocket Actor Session
 struct WsSession {
-    id: usize,                    // Unique session id (can just be random)
+    id: String,                   // Unique session ID (UUID string for security)
     hb: Instant,                  // Last heartbeat received
     addr: Addr<AttendanceServer>, // Address of the central server actor
     course_id: Uuid,              // Which course this session is interested in
@@ -35,7 +33,7 @@ impl WsSession {
                     act.course_id
                 );
                 act.addr.do_send(Disconnect {
-                    session_id: act.id,
+                    session_id: act.id.clone(),
                     course_id: act.course_id,
                 });
                 ctx.stop();
@@ -59,7 +57,7 @@ impl Actor for WsSession {
             .send(Connect {
                 addr: addr.recipient(), // Send Recipient address
                 course_id: self.course_id,
-                session_id: self.id,
+                session_id: self.id.clone(),
             })
             .into_actor(self)
             .then(|res, _act, ctx| {
@@ -92,7 +90,7 @@ impl Actor for WsSession {
     fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
         log::info!("WebSocket session stopping for course {}", self.course_id);
         self.addr.do_send(Disconnect {
-            session_id: self.id,
+            session_id: self.id.clone(),
             course_id: self.course_id,
         });
         actix::Running::Stop
@@ -167,48 +165,8 @@ async fn ws_index(
         return Ok(HttpResponse::NotFound().body("Course not found"));
     }
 
-    // --- Use Atomic Counter for ID ---
-    let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::SeqCst);
-    log::info!("Assigning session ID: {}", session_id);
-
-    let session = WsSession {
-        id: session_id, // Generate a random session ID
-        hb: Instant::now(),
-        addr: state.ws_server.clone(), // Clone the Addr
-        course_id,
-    };
-
-    // Upgrade the HTTP connection to WebSocket
-    ws::start(session, &req, stream)
-}
-
-// Public version of ws_index that doesn't require host-only
-pub async fn ws_index_public(
-    req: HttpRequest,
-    stream: web::Payload,
-    path: web::Path<Uuid>,
-    state: web::Data<AppState>,
-) -> Result<HttpResponse, Error> {
-    let course_id = path.into_inner();
-    log::info!(
-        "Public WebSocket upgrade request for course_id: {}",
-        course_id
-    );
-
-    // Verify course exists before upgrading
-    if course_db::fetch_course_by_id(&state.db_pool, course_id)
-        .await
-        .is_err()
-    {
-        log::error!(
-            "Attempted WebSocket connection for non-existent course ID: {}",
-            course_id
-        );
-        return Ok(HttpResponse::NotFound().body("Course not found"));
-    }
-
-    // Use Atomic Counter for ID
-    let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::SeqCst);
+    // Generate cryptographically random UUID for session ID (prevents enumeration attacks)
+    let session_id = Uuid::new_v4().to_string();
     log::info!("Assigning session ID: {}", session_id);
 
     let session = WsSession {
@@ -222,7 +180,7 @@ pub async fn ws_index_public(
     ws::start(session, &req, stream)
 }
 
-// Host-only config because only dashboard connects to WS
+// Host-only config because only dashboard (instructor) connects to WS
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(ws_index);
 }

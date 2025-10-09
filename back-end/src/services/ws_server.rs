@@ -12,14 +12,14 @@ use crate::db::attendance as attendance_db;
 pub struct Connect {
     pub addr: Recipient<WsMessage>, // Address of the WsSession actor
     pub course_id: Uuid,
-    pub session_id: usize,
+    pub session_id: String, // Using UUID string for unpredictable session IDs
 }
 
 /// Message sent from a WsSession actor when it disconnects.
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct Disconnect {
-    pub session_id: usize,
+    pub session_id: String, // Using UUID string for unpredictable session IDs
     pub course_id: Uuid, // Include course_id to find the right room
 }
 
@@ -43,7 +43,8 @@ pub struct AttendanceServer {
     // Map course_id to a set of connected session recipients
     rooms: HashMap<Uuid, HashSet<Recipient<WsMessage>>>,
     // Map course_id to a map of session_id -> recipient for efficient disconnection
-    sessions: HashMap<Uuid, HashMap<usize, Recipient<WsMessage>>>,
+    // Using String (UUID) for session IDs to prevent session enumeration attacks
+    sessions: HashMap<Uuid, HashMap<String, Recipient<WsMessage>>>,
     // Database pool for fetching initial attendance counts
     db_pool: SqlitePool,
 }

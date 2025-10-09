@@ -31,6 +31,9 @@ pub enum AppError {
     #[error("Conflict: {0}")]
     Conflict(String), // e.g., Course name already exists
 
+    #[error("Rate Limit Exceeded")]
+    RateLimitExceeded { retry_after_secs: u64 },
+
     #[error("CSV Generation Error: {0}")]
     CsvIntoInnerError(String),
 
@@ -120,6 +123,7 @@ impl ResponseError for AppError {
             AppError::ExpiredCode => StatusCode::BAD_REQUEST,
             AppError::CourseNotActive(_) => StatusCode::FORBIDDEN,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             AppError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -133,6 +137,17 @@ impl ResponseError for AppError {
             AppError::ExpiredCode => ("expired_code", "Confirmation code has expired.".to_string()),
             AppError::CourseNotActive(message) => ("course_not_active", message.clone()),
             AppError::Conflict(message) => ("conflict", message.clone()),
+            AppError::RateLimitExceeded { retry_after_secs } => {
+                // Build response with Retry-After header
+                let response_body = json!({
+                    "error": "rate_limit_exceeded",
+                    "message": format!("Too many attempts. Please try again in {} seconds.", retry_after_secs),
+                    "retry_after": retry_after_secs
+                });
+                return HttpResponse::build(StatusCode::TOO_MANY_REQUESTS)
+                    .insert_header(("Retry-After", retry_after_secs.to_string()))
+                    .json(response_body);
+            },
             AppError::MultipartError(_) => {
                 // Log detailed error but don't expose internals to client
                 log::error!("Multipart processing error: {:?}", self);

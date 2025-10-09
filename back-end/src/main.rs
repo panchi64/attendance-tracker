@@ -7,6 +7,7 @@ use anyhow::Result as AnyhowResult;
 use dotenvy::dotenv;
 use models::course::vec_string_to_json;
 use sqlx::SqlitePool;
+use std::fs;
 use std::io::Result as IoResult;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -26,13 +27,15 @@ use config::Config;
 use db::database::create_db_pool;
 use middleware::host_only::HostOnly;
 use services::confirmation_codes::start_confirmation_code_generator;
-use services::ws_server::AttendanceServer; // Assuming basic ws_server exists
+use services::rate_limiter::{AttendanceRateLimiter, start_rate_limiter_cleanup};
+use services::ws_server::AttendanceServer;
 
 pub struct AppState {
     db_pool: SqlitePool,
     config: Config,
     ws_server: actix::Addr<AttendanceServer>,
     active_host_course_id: Arc<Mutex<Option<Uuid>>>,
+    attendance_rate_limiter: AttendanceRateLimiter,
 }
 
 async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
@@ -186,6 +189,35 @@ async fn seed_initial_data(pool: &SqlitePool) -> AnyhowResult<()> {
     Ok(())
 }
 
+/// Set restrictive permissions on database file (owner read/write only)
+/// This prevents unauthorized access to the database file from other users
+#[cfg(unix)]
+fn set_database_file_permissions(db_url: &str) -> AnyhowResult<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Extract file path from sqlite: URL
+    let db_path = db_url.strip_prefix("sqlite:").unwrap_or(db_url);
+    let path = Path::new(db_path);
+
+    if path.exists() {
+        let mut perms = fs::metadata(path)?.permissions();
+        perms.set_mode(0o600); // Owner read/write only
+        fs::set_permissions(path, perms)?;
+        log::info!("Database file permissions set to 600 (owner only): {}", db_path);
+    } else {
+        log::warn!("Database file does not exist yet, permissions will be set after creation: {}", db_path);
+    }
+
+    Ok(())
+}
+
+/// Windows doesn't have Unix-style permissions, so this is a no-op
+#[cfg(not(unix))]
+fn set_database_file_permissions(db_url: &str) -> AnyhowResult<()> {
+    log::info!("Database file permission setting not supported on this platform. Using default file permissions.");
+    Ok(())
+}
+
 #[actix_web::main]
 async fn main() -> IoResult<()> {
     dotenv().ok();
@@ -202,6 +234,12 @@ async fn main() -> IoResult<()> {
         .await
         .expect("Failed to run database migrations");
     log::info!("Database migrations completed.");
+
+    // Set restrictive permissions on database file for security
+    if let Err(e) = set_database_file_permissions(&config.database_url) {
+        log::error!("Failed to set database file permissions: {}", e);
+        // Continue anyway as this is not critical to functionality
+    }
 
     // Create necessary directories for uploads (This is now handled by the upload handler itself based on config.frontend_build_path)
     // let uploads_dir = Path::new("../public/uploads/logos"); // Removed
@@ -222,6 +260,13 @@ async fn main() -> IoResult<()> {
 
     // Start confirmation code generator background task
     start_confirmation_code_generator(pool.clone(), config.confirmation_code_duration);
+
+    // Initialize rate limiter for attendance submissions
+    // Max 3 attempts per course per IP per 60 seconds
+    let attendance_rate_limiter = AttendanceRateLimiter::new(3, 60);
+
+    // Start rate limiter cleanup task (cleanup every 5 minutes)
+    start_rate_limiter_cleanup(attendance_rate_limiter.clone(), 300);
 
     // Log the frontend path being used
     let frontend_path = Path::new(&config.frontend_build_path);
@@ -287,6 +332,7 @@ async fn main() -> IoResult<()> {
         config: config.clone(),
         ws_server: ws_server.clone(),
         active_host_course_id: Arc::new(Mutex::new(initial_active_course_id)),
+        attendance_rate_limiter: attendance_rate_limiter.clone(),
     });
 
     HttpServer::new(move || {
@@ -317,16 +363,36 @@ async fn main() -> IoResult<()> {
 
         App::new()
             .app_data(shared_state.clone())
+            // Set JSON payload size limit to 1MB to prevent DoS attacks
+            .app_data(web::JsonConfig::default()
+                .limit(1024 * 1024) // 1MB limit
+                .error_handler(|err, _req| {
+                    log::warn!("JSON payload validation error: {}", err);
+                    actix_web::error::InternalError::from_response(
+                        err,
+                        HttpResponse::PayloadTooLarge()
+                            .json(serde_json::json!({
+                                "error": "payload_too_large",
+                                "message": "Request payload exceeds maximum allowed size of 1MB"
+                            }))
+                    ).into()
+                })
+            )
             .wrap(Logger::default())
             .wrap(Governor::new(&governor_conf))
             .wrap(cors)
-            // Security headers to prevent various attacks
+            // Enhanced security headers to prevent various attacks
             .wrap(
                 DefaultHeaders::new()
                     .add(("X-Frame-Options", "DENY")) // Prevent clickjacking
                     .add(("X-Content-Type-Options", "nosniff")) // Prevent MIME sniffing
                     .add(("Referrer-Policy", "strict-origin-when-cross-origin")) // Control referrer info
                     .add(("X-XSS-Protection", "1; mode=block")) // Enable XSS protection (legacy browsers)
+                    .add(("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()")) // Restrict browser features
+                    .add(("Cross-Origin-Opener-Policy", "same-origin")) // Isolate browsing context
+                    .add(("Cross-Origin-Resource-Policy", "same-origin")) // Prevent resource loading from other origins
+                    .add(("Cross-Origin-Embedder-Policy", "require-corp")) // Enforce CORP on resources
+                    .add(("X-Permitted-Cross-Domain-Policies", "none")) // Restrict cross-domain policies
                     .add((
                         "Content-Security-Policy",
                         "default-src 'self'; \
@@ -334,9 +400,11 @@ async fn main() -> IoResult<()> {
                          style-src 'self' 'unsafe-inline'; \
                          img-src 'self' data: blob:; \
                          font-src 'self' data:; \
-                         connect-src 'self'; \
-                         frame-ancestors 'none';"
-                    )) // Content Security Policy
+                         connect-src 'self' ws: wss:; \
+                         frame-ancestors 'none'; \
+                         base-uri 'self'; \
+                         form-action 'self';"
+                    )) // Content Security Policy (unsafe-inline/eval needed for Next.js)
             )
             // --- Management API (Host Only) ---
             .service(

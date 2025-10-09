@@ -38,6 +38,7 @@ async fn upload_logo_handler(
     let base_uploads_dir = Path::new(&state.config.uploads_path)
         .join("logos");
 
+    // Create directory if it doesn't exist
     fs::create_dir_all(&base_uploads_dir).map_err(|io_error| {
         log::error!(
             "Failed to create directory {:?}: {}",
@@ -49,6 +50,14 @@ async fn upload_logo_handler(
             base_uploads_dir
         )))
     })?;
+
+    // Canonicalize the base directory to resolve symlinks and prevent path traversal
+    let canonical_base = base_uploads_dir.canonicalize().map_err(|e| {
+        log::error!("SECURITY: Failed to canonicalize upload directory: {}", e);
+        AppError::InternalError(anyhow::Error::new(e).context("Cannot resolve upload directory path"))
+    })?;
+
+    log::debug!("Canonical upload directory: {:?}", canonical_base);
 
     // Clean up old university logo files before saving new one
     log::info!("Cleaning up old university logo files");
@@ -128,10 +137,25 @@ async fn upload_logo_handler(
                         AppError::InternalError(anyhow::Error::new(e).context("PNG conversion failed"))
                     })?;
 
-                // Always save as PNG regardless of original format
-                let safe_filename = "university-logo.png".to_string();
-                let server_path_buf = base_uploads_dir.join(&safe_filename);
-                let server_path = server_path_buf
+                // Always save as PNG with hardcoded safe filename
+                let safe_filename = "university-logo.png";
+                let file_path = canonical_base.join(safe_filename);
+
+                // Verify the final path is still within the canonical base directory
+                // This prevents path traversal attacks even with a hardcoded filename
+                let canonical_file = file_path.canonicalize()
+                    .unwrap_or_else(|_| file_path.clone()); // File doesn't exist yet, use as-is
+
+                if !canonical_file.starts_with(&canonical_base) {
+                    log::error!(
+                        "SECURITY: Path traversal attempt detected! Base: {:?}, File: {:?}",
+                        canonical_base,
+                        canonical_file
+                    );
+                    return Err(AppError::BadClientData("Invalid file path detected".to_string()));
+                }
+
+                let server_path = canonical_file
                     .to_str()
                     .ok_or_else(|| {
                         AppError::InternalError(anyhow::anyhow!(
@@ -140,7 +164,7 @@ async fn upload_logo_handler(
                     })?
                     .to_string();
 
-                saved_filename = Some(safe_filename.clone());
+                saved_filename = Some(safe_filename.to_string());
 
                 // Clone path for the blocking task
                 let server_path_clone = server_path.clone();

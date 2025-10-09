@@ -1,3 +1,5 @@
+pub mod pii;
+
 use crate::config::Config;
 
 // Helper to determine the base URL the server is accessible at

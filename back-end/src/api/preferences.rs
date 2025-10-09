@@ -52,6 +52,7 @@ async fn update_preferences_handler(
 }
 
 // Public version of get_preferences_handler without HostOnly middleware
+// Read-only access for frontend to fetch current preferences
 pub async fn get_preferences_handler_public(
     state: web::Data<AppState>,
 ) -> Result<impl Responder, AppError> {
@@ -65,7 +66,7 @@ pub async fn get_preferences_handler_public(
 
 /// Get the currently active course ID from AppState
 /// This endpoint is useful for students to check which course is currently active
-/// before submitting attendance
+/// before submitting attendance (Read-only access)
 #[get("/active-course")]
 pub async fn get_active_course_handler(state: web::Data<AppState>) -> Result<impl Responder, AppError> {
     log::debug!("Fetching active course ID from AppState");
@@ -77,40 +78,6 @@ pub async fn get_active_course_handler(state: web::Data<AppState>) -> Result<imp
         current_course_id: active_id.map(|id| id.to_string()),
     };
     Ok(HttpResponse::Ok().json(response))
-}
-
-// Public version of update_preferences_handler without HostOnly middleware
-pub async fn update_preferences_handler_public(
-    state: web::Data<AppState>,
-    payload: web::Json<SetCurrentCoursePayload>,
-) -> Result<impl Responder, AppError> {
-    log::info!(
-        "Updating application preferences (public endpoint) - setting current course ID to: {}",
-        payload.current_course_id
-    );
-
-    let course_id = Uuid::parse_str(&payload.current_course_id).map_err(|_| {
-        AppError::BadClientData("Invalid current_course_id format. Expected UUID.".to_string())
-    })?;
-
-    course_db::fetch_course_by_id(&state.db_pool, course_id).await?;
-
-    pref_db::set_current_course_id(&state.db_pool, course_id).await?;
-    log::info!(
-        "Successfully set current course ID preference to: {}",
-        course_id
-    );
-
-    {
-        let mut active_id = state.active_host_course_id.lock().unwrap();
-        *active_id = Some(course_id);
-        log::info!(
-            "AppState active_host_course_id updated via public endpoint to: {:?}",
-            course_id
-        );
-    }
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({"message": "Preferences updated successfully"})))
 }
 
 // Configuration (Host Only)

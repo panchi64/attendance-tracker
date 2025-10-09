@@ -7,11 +7,12 @@ use crate::{
     services::{
         confirmation_codes,
         ws_server::{AttendanceServer, AttendanceUpdate},
-    }, // Import WS types
+    },
+    utils::pii::hash_pii,
 };
 use actix::Addr;
 use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
-use uuid::Uuid; // For sending messages to WS actor
+use uuid::Uuid;
 use validator::Validate;
 
 #[post("/attendance")]
@@ -34,6 +35,21 @@ async fn submit_attendance_handler(
     let submitted_course_id = Uuid::parse_str(&payload.course_id).map_err(|_| {
         AppError::BadClientData("Invalid course_id format in payload. Expected UUID.".to_string())
     })?;
+
+    // --- Rate Limiting Check ---
+    // Get peer IP for rate limiting
+    let peer_ip = req.peer_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Check rate limit before processing request
+    if let Err(retry_after) = state.attendance_rate_limiter
+        .check_allowed(submitted_course_id, &peer_ip)
+        .await
+    {
+        return Err(AppError::RateLimitExceeded { retry_after_secs: retry_after });
+    }
+    // --- End Rate Limiting Check ---
 
     // --- New Check: Validate against active_host_course_id ---
     let active_host_id_lock = state.active_host_course_id.lock().unwrap();
@@ -70,12 +86,6 @@ async fn submit_attendance_handler(
     // Get the device fingerprint from the payload (browser-generated)
     let client_fingerprint = &payload.device_fingerprint;
 
-    // Extract server-side components for stronger fingerprinting
-    // Using peer_addr to get actual IP (not spoofable via headers)
-    let peer_ip = req.peer_addr()
-        .map(|addr| addr.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-
     // Get User-Agent header
     let user_agent = req.headers()
         .get(actix_web::http::header::USER_AGENT)
@@ -110,12 +120,16 @@ async fn submit_attendance_handler(
 
     if device_already_submitted {
         log::warn!(
-            "SECURITY: Duplicate attendance attempt blocked - course_id={}, student_id={}, enhanced_fingerprint={}, ip={}",
+            "SECURITY: Duplicate attendance attempt blocked - course_id={}, student_id_hash={}, fingerprint_hash={}, ip_hash={}",
             submitted_course_id,
-            payload.student_id,
-            enhanced_fingerprint,
-            peer_ip
+            hash_pii(&payload.student_id),
+            hash_pii(&enhanced_fingerprint),
+            hash_pii(&peer_ip)
         );
+        // Record failed attempt for rate limiting
+        state.attendance_rate_limiter
+            .record_failed_attempt(submitted_course_id, &peer_ip)
+            .await;
         return Err(AppError::Conflict(
             "This device has already been used to mark attendance for this course today."
                 .to_string(),
@@ -132,12 +146,16 @@ async fn submit_attendance_handler(
 
     if student_already_submitted {
         log::warn!(
-            "SECURITY: Duplicate student attendance blocked - course_id={}, student_id={}, student_name={}, ip={}",
+            "SECURITY: Duplicate student attendance blocked - course_id={}, student_id_hash={}, student_name_hash={}, ip_hash={}",
             submitted_course_id,
-            payload.student_id,
-            payload.student_name,
-            peer_ip
+            hash_pii(&payload.student_id),
+            hash_pii(&payload.student_name),
+            hash_pii(&peer_ip)
         );
+        // Record failed attempt for rate limiting
+        state.attendance_rate_limiter
+            .record_failed_attempt(submitted_course_id, &peer_ip)
+            .await;
         return Err(AppError::Conflict(format!(
             "Student ID '{}' has already been marked present for this course today.",
             payload.student_id
@@ -153,13 +171,17 @@ async fn submit_attendance_handler(
     .await
     {
         log::warn!(
-            "SECURITY: Failed confirmation code attempt - course_id={}, student_id={}, code_submitted={}, ip={}, reason={:?}",
+            "SECURITY: Failed confirmation code attempt - course_id={}, student_id_hash={}, code_hash={}, ip_hash={}, reason={:?}",
             submitted_course_id,
-            payload.student_id,
-            payload.confirmation_code,
-            peer_ip,
+            hash_pii(&payload.student_id),
+            hash_pii(&payload.confirmation_code),
+            hash_pii(&peer_ip),
             e
         );
+        // Record failed attempt for rate limiting
+        state.attendance_rate_limiter
+            .record_failed_attempt(submitted_course_id, &peer_ip)
+            .await;
         return Err(e);
     }
     log::debug!(
@@ -187,13 +209,18 @@ async fn submit_attendance_handler(
     })?;
 
     log::info!(
-        "SECURITY: Attendance recorded successfully - course_id={}, student_id={}, student_name={}, ip={}, fingerprint={}",
+        "SECURITY: Attendance recorded successfully - course_id={}, student_id_hash={}, student_name_hash={}, ip_hash={}, fingerprint_hash={}",
         submitted_course_id,
-        record.student_id,
-        record.student_name,
-        peer_ip,
-        enhanced_fingerprint
+        hash_pii(&record.student_id),
+        hash_pii(&record.student_name),
+        hash_pii(&peer_ip),
+        hash_pii(&enhanced_fingerprint)
     );
+
+    // Reset rate limiter on successful submission
+    state.attendance_rate_limiter
+        .reset(submitted_course_id, &peer_ip)
+        .await;
 
     // 6. Notify WebSocket clients
     let current_count =
