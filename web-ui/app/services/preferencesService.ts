@@ -203,7 +203,15 @@ export const loadCurrentCoursePreferences = async (): Promise<CoursePreferences>
                 const backendCourse = await courseResponse.json() as BackendCourse;
                 return transformBackendCourse(backendCourse);
             } else if (courseResponse.status === 404) {
-                console.warn(`Course with ID ${currentId} not found, will try alternatives`);
+                console.warn(`Course with ID ${currentId} not found in database - clearing stale cache`);
+                // Immediately clear the stale course ID from localStorage to prevent other components from using it
+                localPrefs.currentCourseId = null;
+                // Also remove the stale course from the courses map if it exists
+                const staleEntry = Object.entries(localPrefs.courses).find(([, c]) => c.id === currentId);
+                if (staleEntry) {
+                    delete localPrefs.courses[staleEntry[0]];
+                }
+                savePreferencesToStorage(localPrefs);
                 currentId = null;
             } else {
                 console.warn(`Error fetching course ${currentId}: ${courseResponse.status}`);

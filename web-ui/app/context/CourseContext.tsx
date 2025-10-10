@@ -3,7 +3,6 @@
 import { createContext, useContext, useReducer, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { CourseState, CourseAction } from '../types/course';
 import {
-  loadPreferencesFromStorage,
   loadCurrentCoursePreferences,
   saveCoursePreferences,
   getAvailableCourses,
@@ -30,60 +29,22 @@ function normalizeSections(sections: string[]): string[] {
 // Initial state setup
 const getInitialState = (): CourseState => {
   console.log("getInitialState called");
-  let initialCourse: CoursePreferences | undefined = undefined;
-  let initialCourseId: string | null = null;
 
-  try {
-    const initialPrefsStore = loadPreferencesFromStorage(); // Load validated local state
-    console.log("Initial prefs from storage:", initialPrefsStore);
-
-    initialCourseId = initialPrefsStore.currentCourseId; // Get potential current ID
-
-    if (initialCourseId) {
-      // Try finding the course data corresponding to the ID in the stored map
-      initialCourse = Object.values(initialPrefsStore.courses).find(c => c?.id === initialCourseId);
-      console.log("Found initial course in storage by ID:", initialCourseId, initialCourse);
-    }
-
-    // If not found by ID (maybe ID is stale or points nowhere), try getting the first course
-    if (!initialCourse && Object.keys(initialPrefsStore.courses).length > 0) {
-      initialCourse = Object.values(initialPrefsStore.courses)[0];
-      initialCourseId = initialCourse?.id ?? null; // Update ID if we took the first course
-      console.log("Initial course not found by ID, using first course:", initialCourse);
-    }
-  } catch (e) {
-    console.error("Error processing initial state from storage:", e);
-    // Fallback to ensure initialCourse remains undefined
-  }
-
-  // If still no course found (empty storage, errors), create a safe default structure
-  if (!initialCourse) {
-    console.log("No valid initial course found, using default structure.");
-    // Use a safe, minimal default structure to avoid runtime errors
-    initialCourse = {
-      id: null, // Important: Start with null ID if truly default/empty
-      courseName: "Setup Course",
-      sectionNumber: "000",
-      sections: [],
-      professorName: "Setup",
-      officeHours: "",
-      news: "Please create or select a course.",
-      totalStudents: 0,
-      logoPath: "/university-logo.png", // Default logo
-    };
-    initialCourseId = null; // Ensure ID is null if default
-  }
+  // IMPORTANT: Always start with null courseId to prevent stale cache issues
+  // The useEffect in DashboardLayout will call loadCurrentCoursePreferences()
+  // which properly validates course IDs against the backend before using them
+  console.log("Using default structure with null courseId - will be populated by useEffect");
 
   return {
-    courseId: initialCourse.id, // Use the resolved initial course ID (can be null)
-    courseName: initialCourse.courseName,
-    sectionNumber: initialCourse.sectionNumber,
-    sections: initialCourse.sections,
-    professorName: initialCourse.professorName,
-    officeHours: initialCourse.officeHours,
-    news: initialCourse.news,
-    totalStudents: initialCourse.totalStudents,
-    logoPath: initialCourse.logoPath,
+    courseId: null, // Always start null, let loadCurrentCoursePreferences validate
+    courseName: "Loading...",
+    sectionNumber: "000",
+    sections: [],
+    professorName: "",
+    officeHours: "",
+    news: "Loading course information...",
+    totalStudents: 0,
+    logoPath: "/university-logo.png",
     isLoading: true, // Always start loading, useEffect will fetch real data
     presentCount: 0,
     confirmationCode: "...",
