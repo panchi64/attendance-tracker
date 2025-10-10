@@ -22,8 +22,8 @@ The application uses SQLite as its database engine. Here's a diagram of the data
 │ confirmation_code (TEXT)    │  ┌───────────────────────────┐      │
 │ confirmation_code_expires_at│  │ device_submissions        │      │
 │ created_at (DATETIME)       │  ├───────────────────────────┤      │
-│ updated_at (DATETIME)       │◄─┤ id (INTEGER, PK)          │      │
-└─────────────────────────────┘  │ course_id (TEXT, FK)      │◄─────┘
+│ updated_at (DATETIME)       │  │ id (INTEGER, PK)          │      │
+└─────────────────────────────┘◄─┤ course_id (TEXT, FK)      │◄─────┘
                                  │ device_fingerprint (TEXT) │
                                  │ timestamp (DATETIME)      │
                                  │ submission_date (TEXT)*   │
