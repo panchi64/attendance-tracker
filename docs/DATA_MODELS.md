@@ -15,7 +15,7 @@ The application uses SQLite as its database engine. Here's a diagram of the data
 │ section_number (TEXT)       │  │ student_name (TEXT)       │      │
 │ sections (JSON)             │  │ student_id (TEXT)         │      │
 │ professor_name (TEXT)       │  │ timestamp (DATETIME)      │      │
-│ office_hours (TEXT)         │  │ attendance_date (TEXT)    │      │
+│ office_hours (TEXT)         │  │ attendance_date (TEXT)*   │      │
 │ news (TEXT)                 │  └───────────────────────────┘      │
 │ total_students (INT)        │                                     │
 │ logo_path (TEXT)            │                                     │
@@ -24,14 +24,21 @@ The application uses SQLite as its database engine. Here's a diagram of the data
 │ created_at (DATETIME)       │  ├───────────────────────────┤      │
 │ updated_at (DATETIME)       │◄─┤ id (INTEGER, PK)          │      │
 └─────────────────────────────┘  │ course_id (TEXT, FK)      │◄─────┘
-                                 │ ip_address (TEXT)         │
-                                 │ submission_date (TEXT)    │
-┌────────────────────────┐       └───────────────────────────┘
-│      preferences       │
-├────────────────────────┤
-│ key (TEXT, PK)         │
-│ value (TEXT)           │
-└────────────────────────┘
+                                 │ device_fingerprint (TEXT) │
+                                 │ timestamp (DATETIME)      │
+                                 │ submission_date (TEXT)*   │
+                                 └───────────────────────────┘
+
+┌────────────────────────────────┐
+│      preferences               │
+├────────────────────────────────┤
+│ key (TEXT, PK)                 │
+│ value (TEXT)                   │
+└────────────────────────────────┘
+
+* Generated columns: Automatically computed from other columns (SQLite GENERATED ALWAYS AS)
+  - attendance_date: substr(timestamp, 1, 10)
+  - submission_date: substr(timestamp, 1, 10)
 ```
 
 ## Core Models
@@ -104,7 +111,7 @@ Records when a student marks their attendance for a course.
 - `student_name`: Student's full name
 - `student_id`: Student's ID number/code
 - `timestamp`: Date and time when attendance was recorded
-- `attendance_date`: Date of attendance (for daily grouping, derived from timestamp)
+- `attendance_date`: Date of attendance (for daily grouping, generated column derived from timestamp)
 
 #### Rust Model
 
@@ -127,8 +134,9 @@ Tracks devices used for attendance to prevent multiple submissions from the same
 #### Database Fields
 - `id`: Autoincrement integer primary key
 - `course_id`: Foreign key to the course
-- `ip_address`: IP address of the device
-- `submission_date`: Date of submission (for daily grouping)
+- `device_fingerprint`: Browser device fingerprint hash (composite of user agent, screen resolution, etc.)
+- `timestamp`: Date and time when the device was used to submit attendance
+- `submission_date`: Date of submission (for daily grouping, generated column derived from timestamp)
 
 #### Rust Model
 ```rust
@@ -164,15 +172,30 @@ In addition to the core database models, there are several specialized models fo
 Used when creating a new course.
 
 ```rust
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct CreateCoursePayload {
+    #[validate(length(min = 1, max = 200))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 20))]
     pub section_number: String,
+
+    #[validate(length(min = 0, max = 100))]
     pub sections: Vec<String>,
+
+    #[validate(length(min = 1, max = 100))]
     pub professor_name: String,
+
+    #[validate(length(min = 0, max = 500))]
     pub office_hours: String,
+
+    #[validate(length(min = 0, max = 2000))]
     pub news: String,
+
+    #[validate(range(min = 0, max = 10000))]
     pub total_students: i64,
+
+    #[validate(length(min = 0, max = 500))]
     pub logo_path: String,
 }
 ```
@@ -182,15 +205,30 @@ pub struct CreateCoursePayload {
 Used when updating an existing course.
 
 ```rust
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UpdateCoursePayload {
+    #[validate(length(min = 1, max = 200))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 20))]
     pub section_number: String,
+
+    #[validate(length(min = 0, max = 100))]
     pub sections: Vec<String>,
+
+    #[validate(length(min = 1, max = 100))]
     pub professor_name: String,
+
+    #[validate(length(min = 0, max = 500))]
     pub office_hours: String,
+
+    #[validate(length(min = 0, max = 2000))]
     pub news: String,
+
+    #[validate(range(min = 0, max = 10000))]
     pub total_students: i64,
+
+    #[validate(length(min = 0, max = 500))]
     pub logo_path: String,
 }
 ```
@@ -200,12 +238,22 @@ pub struct UpdateCoursePayload {
 Used when a student submits their attendance.
 
 ```rust
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SubmitAttendancePayload {
-    pub course_id: String,
+    #[validate(length(min = 1, max = 36))]
+    pub course_id: String, // UUID string
+
+    #[validate(length(min = 1, max = 100))]
     pub student_name: String,
+
+    #[validate(length(min = 1, max = 50))]
     pub student_id: String,
+
+    #[validate(length(min = 1, max = 20))]
     pub confirmation_code: String,
+
+    #[validate(length(min = 1, max = 500))]
+    pub device_fingerprint: String, // Browser fingerprint hash for device tracking
 }
 ```
 
@@ -231,6 +279,7 @@ pub struct ConfirmationCodeResponse {
     pub code: String,
     pub expires_at: DateTime<Utc>,
     pub expires_in_seconds: i64,
+    pub refresh_interval_seconds: i64, // Tells frontend when to poll for next code
 }
 ```
 
@@ -331,21 +380,21 @@ type CourseState = Omit<CoursePreferences, 'id'> & {
 ### Example 2: Student Submitting Attendance
 
 1. Student fills out the attendance form
-2. Frontend creates a `SubmitAttendancePayload` with form data
+2. Frontend creates a `SubmitAttendancePayload` with form data and device fingerprint
 3. Backend validates the confirmation code
-4. Backend checks if the device/student has already submitted
-5. Backend creates a new `AttendanceRecord` in the database
-6. Backend returns an `AttendanceResponse`
-7. Backend sends a WebSocket notification with the updated attendance count
+4. Backend checks if the device fingerprint has already been used for this course today
+5. Backend checks if the student has already submitted attendance today
+6. Backend creates a new `AttendanceRecord` in the database
+7. Backend records the device submission in `device_submissions` table
+8. Backend returns an `AttendanceResponse`
+9. Backend sends a WebSocket notification with the updated attendance count
 
 ## Database Indices and Performance
 
 The database uses several indices to optimize query performance:
 
-- Index on `attendance_records.course_id` for faster attendance queries
-- Index on `attendance_records.attendance_date` for daily attendance counts
-- Index on `device_submissions.course_id` and `device_submissions.submission_date` for checking duplicate submissions
-- Index on `device_submissions.ip_address` for quickly finding submissions by IP
+- Unique index on `attendance_records(course_id, student_id, attendance_date)` for preventing duplicate daily attendance
+- Unique index on `device_submissions(course_id, device_fingerprint, submission_date)` for preventing duplicate device submissions
 
 ## Data Validation
 

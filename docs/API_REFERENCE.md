@@ -10,11 +10,74 @@ The base URL for all API endpoints is the server where the application is runnin
 http://localhost:8080
 ```
 
-## Authentication
+## Authentication & Security
 
-Most endpoints don't require authentication since the application is designed to run locally. However, some administrative endpoints are restricted to the host machine only using the `HostOnly` middleware.
+The application uses a multi-layered security approach:
 
-## Response Format
+### Host-Only Access
+
+Administrative endpoints (under `/api/admin/*` and `/api/host/*`) are restricted to the host machine only using the `HostOnly` middleware. These endpoints are only accessible from `localhost` or `127.0.0.1`.
+
+**Protected endpoints include:**
+- Course creation, modification, deletion
+- Preference updates
+- Logo uploads
+- Data exports
+- WebSocket connections for live updates
+
+### CSRF Protection
+
+All administrative endpoints (POST, PUT, DELETE) require a CSRF token to prevent Cross-Site Request Forgery attacks.
+
+**How to use CSRF tokens:**
+
+1. First, obtain a CSRF token:
+   ```
+   GET /api/auth/csrf-token
+   ```
+
+   Response:
+   ```json
+   {
+     "csrf_token": "a1b2c3d4e5f6g7h8i9j0"
+   }
+   ```
+
+2. Include the token in subsequent requests as a header:
+   ```
+   X-CSRF-Token: a1b2c3d4e5f6g7h8i9j0
+   ```
+
+CSRF tokens are valid for 1 hour and are automatically cleaned up when expired.
+
+### Security Headers
+
+The API includes comprehensive security headers in all responses:
+
+- `X-Frame-Options: DENY` - Prevents clickjacking attacks
+- `X-Content-Type-Options: nosniff` - Prevents MIME sniffing
+- `X-XSS-Protection: 1; mode=block` - Enables XSS protection
+- `Content-Security-Policy` - Restricts resource loading
+- `Cross-Origin-Opener-Policy: same-origin` - Isolates browsing context
+- `Cross-Origin-Resource-Policy: same-origin` - Prevents cross-origin resource loading
+- `Referrer-Policy: strict-origin-when-cross-origin` - Controls referrer information
+- `Permissions-Policy` - Restricts browser features (geolocation, microphone, camera, payment)
+
+### CORS Policy
+
+The application uses a restrictive CORS policy that only allows requests from the same origin. Allowed origins include:
+- `http://localhost:8080`
+- `http://127.0.0.1:8080`
+- The configured server host and port
+
+## Request/Response Format
+
+### Request Limits
+
+- **JSON Payload Size**: Maximum 1MB per request to prevent DoS attacks
+- Exceeding this limit returns a `413 Payload Too Large` error
+
+### Response Format
 
 All API responses are in JSON format with the following general structure for errors:
 
@@ -45,6 +108,41 @@ Success responses vary by endpoint but generally follow this pattern:
 - `forbidden`: Access to the resource is forbidden
 - `conflict`: Resource already exists or conflicts
 - `internal_error`: An unexpected server error occurred
+
+## Endpoint Organization
+
+The API endpoints are organized into three categories:
+
+### Public Endpoints (`/api/*`)
+
+Accessible from any device on the local network. These are read-only operations for students:
+
+- `GET /api/courses` - List all courses
+- `GET /api/courses/{id}` - Get course details
+- `GET /api/preferences` - Get current preferences
+- `GET /api/active-course` - Get active course ID
+- `GET /api/confirmation-code/{course_id}` - Get confirmation code
+- `GET /api/qrcode/{course_id}` - Generate QR code
+- `POST /api/attendance` - Submit attendance
+- `GET /api/auth/csrf-token` - Get CSRF token
+
+### Administrative Endpoints (`/api/admin/*`)
+
+Restricted to host machine only. Require CSRF token for state-changing operations:
+
+- `POST /api/admin/courses` - Create course
+- `PUT /api/admin/courses/{id}` - Update course
+- `DELETE /api/admin/courses/{id}` - Delete course
+- `POST /api/admin/courses/switch` - Switch active course
+- `POST /api/admin/preferences` - Update preferences
+- `POST /api/admin/upload-logo` - Upload logo
+- `GET /api/admin/export/csv/{course_id}` - Export attendance data
+
+### Host-Only Real-time (`/api/host/*`)
+
+Restricted to host machine only for real-time updates:
+
+- `WebSocket /api/host/ws/{course_id}` - WebSocket connection for live attendance updates
 
 ## API Endpoints
 
@@ -124,10 +222,10 @@ Returns details of a specific course.
 #### Create Course
 
 ```
-POST /api/courses
+POST /api/admin/courses
 ```
 
-Creates a new course.
+Creates a new course. **Requires host-only access and CSRF token.**
 
 **Request Body:**
 
@@ -165,10 +263,10 @@ Creates a new course.
 #### Update Course
 
 ```
-PUT /api/courses/{id}
+PUT /api/admin/courses/{id}
 ```
 
-Updates an existing course.
+Updates an existing course. **Requires host-only access and CSRF token.**
 
 **Parameters:**
 
@@ -210,10 +308,10 @@ Updates an existing course.
 #### Delete Course
 
 ```
-DELETE /api/courses/{id}
+DELETE /api/admin/courses/{id}
 ```
 
-Deletes a course.
+Deletes a course. **Requires host-only access and CSRF token.**
 
 **Parameters:**
 
@@ -226,10 +324,10 @@ Deletes a course.
 #### Switch Course
 
 ```
-POST /api/courses/switch
+POST /api/admin/courses/switch
 ```
 
-Sets a course as the current active course.
+Sets a course as the current active course. **Requires host-only access and CSRF token.**
 
 **Request Body:**
 
@@ -265,9 +363,12 @@ Records a student's attendance.
   "course_id": "550e8400-e29b-41d4-a716-446655440000",
   "student_name": "John Student",
   "student_id": "12345678",
-  "confirmation_code": "AB3XY9"
+  "confirmation_code": "AB3XY9",
+  "device_fingerprint": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
 }
 ```
+
+**Note:** The `device_fingerprint` is a hash generated from browser characteristics (user agent, screen resolution, etc.) to prevent multiple submissions from the same device.
 
 **Response Example:**
 
@@ -306,9 +407,12 @@ Gets the current confirmation code for a course.
 {
   "code": "XY4Z7P",
   "expires_at": "2024-03-20T17:30:00.000Z",
-  "expires_in_seconds": 180
+  "expires_in_seconds": 180,
+  "refresh_interval_seconds": 300
 }
 ```
+
+**Note:** The `refresh_interval_seconds` tells the frontend when to poll for the next code.
 
 ### QR Codes
 
@@ -328,6 +432,26 @@ Generates a QR code for the attendance form URL.
 
 Returns a PNG image of the QR code that encodes the attendance form URL.
 
+### CSRF Token
+
+#### Get CSRF Token
+
+```
+GET /api/auth/csrf-token
+```
+
+Obtains a CSRF token required for administrative operations.
+
+**Response Example:**
+
+```json
+{
+  "csrf_token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+}
+```
+
+**Note:** Include this token in the `X-CSRF-Token` header for all administrative endpoints.
+
 ### Preferences
 
 #### Get Preferences
@@ -346,13 +470,29 @@ Gets application preferences, including the current course ID.
 }
 ```
 
+#### Get Active Course (Real-time)
+
+```
+GET /api/active-course
+```
+
+Gets the currently active course ID from the server's in-memory state. This endpoint provides real-time updates and is used for syncing the dashboard.
+
+**Response Example:**
+
+```json
+{
+  "current_course_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
 #### Update Preferences
 
 ```
-POST /api/preferences
+POST /api/admin/preferences
 ```
 
-Updates application preferences.
+Updates application preferences. **Requires host-only access and CSRF token.**
 
 **Request Body:**
 
@@ -375,10 +515,10 @@ Updates application preferences.
 #### Upload Logo
 
 ```
-POST /api/upload-logo
+POST /api/admin/upload-logo
 ```
 
-Uploads a logo for a course.
+Uploads a logo for a course. **Requires host-only access and CSRF token.**
 
 **Request:**
 
@@ -427,16 +567,10 @@ Timestamp,Student Name,Student ID,Course Name,Course ID
 #### Connect to WebSocket
 
 ```
-WebSocket: /api/ws/{course_id}
+WebSocket: /api/host/ws/{course_id}
 ```
 
-or for public access:
-
-```
-WebSocket: /api/ws/{course_id}
-```
-
-Establishes a WebSocket connection for real-time attendance updates.
+Establishes a WebSocket connection for real-time attendance updates. **Requires host-only access.**
 
 **Parameters:**
 
@@ -468,7 +602,12 @@ The API uses the following HTTP status codes:
 
 ## Rate Limiting
 
-The API does not currently implement rate limiting as it is designed for local network use, but may add this feature in the future.
+The API implements rate limiting to prevent abuse and DoS attacks:
+
+- **General rate limit**: 30 requests per minute per IP with a burst capacity of 50 requests
+- **Attendance submissions**: Additional rate limiting of 3 attempts per course per IP per 60 seconds
+
+Rate limit headers are included in responses to indicate current usage.
 
 ## Versioning
 
@@ -490,11 +629,22 @@ Get all courses:
 curl -X GET http://localhost:8080/api/courses
 ```
 
-Create a new course:
+Get CSRF token:
 
 ```bash
-curl -X POST http://localhost:8080/api/courses \
+curl -X GET http://localhost:8080/api/auth/csrf-token
+```
+
+Create a new course (requires CSRF token):
+
+```bash
+# First get a CSRF token
+CSRF_TOKEN=$(curl -s http://localhost:8080/api/auth/csrf-token | jq -r '.csrf_token')
+
+# Then use it to create a course
+curl -X POST http://localhost:8080/api/admin/courses \
   -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: $CSRF_TOKEN" \
   -d '{
     "name": "Test Course",
     "section_number": "001",
@@ -516,6 +666,7 @@ curl -X POST http://localhost:8080/api/attendance \
     "course_id": "550e8400-e29b-41d4-a716-446655440000",
     "student_name": "Test Student",
     "student_id": "12345678",
-    "confirmation_code": "AB3XY9"
+    "confirmation_code": "AB3XY9",
+    "device_fingerprint": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
   }'
 ```
