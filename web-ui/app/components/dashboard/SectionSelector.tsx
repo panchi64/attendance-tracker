@@ -42,10 +42,9 @@ export default function SectionSelector() {
       // Update the section in context
       dispatch({ type: 'SET_SECTION_NUMBER', payload: section });
 
-      // Wait a brief moment for state to propagate, then save to backend
-      // The dispatch is synchronous, but we need React to process it
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await saveOrUpdateCourse();
+      // Save to backend with the new section number as an override
+      // This ensures we save the updated value immediately without waiting for React to re-render
+      await saveOrUpdateCourse({ sectionNumber: section });
 
       toast.success(`Switched to section ${section}`);
     } catch (error) {

@@ -128,7 +128,7 @@ type CourseContextType = {
   dispatch: React.Dispatch<CourseAction>;
 
   // Helper methods for common operations
-  saveOrUpdateCourse: () => Promise<void>;
+  saveOrUpdateCourse: (overrides?: Partial<CoursePreferences>) => Promise<void>;
   switchToAnotherCourse: (courseId: string) => Promise<void>;
   createNewCourseAndSwitch: (courseName: string, initialData?: Partial<Omit<CoursePreferences, 'id' | 'courseName'>>) => Promise<void>;
   deleteCurrentCourse: () => Promise<void>;
@@ -161,7 +161,7 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
   ]);
 
   // Common course operations
-  const saveOrUpdateCourse = useCallback(async () => {
+  const saveOrUpdateCourse = useCallback(async (overrides?: Partial<CoursePreferences>) => {
     if (!state.courseName.trim()) {
       dispatch({ type: 'SET_ERROR', payload: 'Course name cannot be empty.' });
       throw new Error('Course name cannot be empty.');
@@ -169,7 +169,11 @@ export const CourseProvider = ({ children }: { children: ReactNode; }) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
     try {
-      const savedCourse = await saveCoursePreferences(currentCoursePrefsForSave);
+      // Merge overrides with current preferences to ensure we save the latest values
+      const prefsToSave = overrides
+        ? { ...currentCoursePrefsForSave, ...overrides }
+        : currentCoursePrefsForSave;
+      const savedCourse = await saveCoursePreferences(prefsToSave);
       dispatch({ type: 'INITIALIZE_PREFERENCES', payload: savedCourse });
       prevSavedPrefsJsonRef.current = JSON.stringify(savedCourse); // Update saved ref
       if (!currentCoursePrefsForSave.id && savedCourse.id) { // If created
