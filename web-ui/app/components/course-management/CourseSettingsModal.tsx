@@ -22,7 +22,6 @@ import {
   FormMessage,
 } from "../ui/form";
 import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
 import LogoUploader from "../ui/LogoUploader";
 import SectionManager from "./SectionManager";
 import { useCourse } from "../../context/CourseContext";
@@ -193,7 +192,6 @@ export default function CourseSettingsModal({
   // Watch form values
   const courseName = form.watch("courseName");
   const professorName = form.watch("professorName");
-  const news = form.watch("news");
   const officeHours = form.watch("officeHours");
   const totalStudents = form.watch("totalStudents");
 
@@ -227,21 +225,6 @@ export default function CourseSettingsModal({
 
     return () => clearTimeout(timeoutId);
   }, [professorName, open, state.professorName, updateContextAndSave]);
-
-  // Debounced autosave for news
-  useEffect(() => {
-    if (!open || news === state.news) return;
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        await updateContextAndSave({ news }, "news");
-      } catch {
-        toast.error("Failed to save news");
-      }
-    }, 800);
-
-    return () => clearTimeout(timeoutId);
-  }, [news, open, state.news, updateContextAndSave]);
 
   // Debounced autosave for officeHours
   useEffect(() => {
@@ -280,7 +263,7 @@ export default function CourseSettingsModal({
           <DialogTitle>Course Settings</DialogTitle>
           <DialogDescription className="flex items-center justify-between">
             <span>
-              Manage your course information, sections, schedule, and branding.
+              Manage your course name, sections, schedule, and branding.
             </span>
             {savingField && (
               <span className="text-xs text-muted-foreground ml-2">
@@ -344,27 +327,6 @@ export default function CourseSettingsModal({
                       <FormDescription>
                         Instructor&apos;s name as it should appear on the
                         dashboard
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="news"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>News / Announcements</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Enter any news or announcements for students..."
-                          className="min-h-[120px]"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Displayed on the main dashboard for students to see
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
